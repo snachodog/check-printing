@@ -337,6 +337,65 @@ async function reprintCheck(id) {
   }
 }
 
+// ── Import modal ─────────────────────────────────────────────────────────────
+
+function openImportModal() {
+  document.getElementById('import-file').value = '';
+  const log = document.getElementById('import-log');
+  log.hidden = true;
+  log.textContent = '';
+  log.className = 'import-log';
+  document.getElementById('btn-run-import').disabled = false;
+  document.getElementById('btn-run-import').textContent = 'Import';
+  document.getElementById('import-modal-overlay').classList.add('open');
+  document.getElementById('import-modal').classList.add('open');
+}
+
+function closeImportModal() {
+  document.getElementById('import-modal-overlay').classList.remove('open');
+  document.getElementById('import-modal').classList.remove('open');
+}
+
+async function runImport() {
+  const fileInput = document.getElementById('import-file');
+  if (!fileInput.files.length) {
+    alert('Select an .mdb file first.');
+    return;
+  }
+
+  const btn = document.getElementById('btn-run-import');
+  btn.disabled = true;
+  btn.textContent = 'Importing…';
+
+  const log = document.getElementById('import-log');
+  log.hidden = false;
+  log.className = 'import-log';
+  log.textContent = 'Running import…';
+
+  const form = new FormData();
+  form.append('mdbfile', fileInput.files[0]);
+
+  try {
+    const res = await fetch('/api/import', { method: 'POST', body: form });
+    const data = await res.json();
+    log.textContent = data.log || '';
+    if (res.ok) {
+      log.classList.add('success');
+      btn.textContent = 'Done';
+      await Promise.all([loadAccount(), loadChecks()]);
+    } else {
+      log.classList.add('error');
+      btn.disabled = false;
+      btn.textContent = 'Retry';
+    }
+  } catch (err) {
+    log.classList.add('error');
+    log.textContent = err.message;
+    btn.disabled = false;
+    btn.textContent = 'Retry';
+  }
+}
+
 // ── Utilities ────────────────────────────────────────────────────────────────
 
 function escHtml(str) {
@@ -382,6 +441,13 @@ function init() {
 
   // Generate PDF
   document.getElementById('btn-generate-pdf').addEventListener('click', generatePdf);
+
+  // Import modal
+  document.getElementById('btn-import').addEventListener('click', openImportModal);
+  document.getElementById('btn-close-import').addEventListener('click', closeImportModal);
+  document.getElementById('btn-cancel-import').addEventListener('click', closeImportModal);
+  document.getElementById('import-modal-overlay').addEventListener('click', closeImportModal);
+  document.getElementById('btn-run-import').addEventListener('click', runImport);
 
   // Initial data load
   loadAccount();

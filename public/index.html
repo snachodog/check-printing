@@ -30,6 +30,7 @@
         Generate PDF <span id="selected-count" class="badge">0</span>
       </button>
       <button id="btn-new-check" class="btn-secondary">+ New Check</button>
+      <button id="btn-import" class="btn-secondary">Import .mdb</button>
     </div>
   </div>
 
@@ -116,6 +117,27 @@
       </div>
     </form>
   </aside>
+
+  <!-- Import modal -->
+  <div id="import-modal-overlay" class="modal-overlay"></div>
+  <div id="import-modal" class="modal" role="dialog" aria-labelledby="import-modal-title">
+    <div class="modal-header">
+      <h2 id="import-modal-title">Import from .mdb</h2>
+      <button id="btn-close-import" class="btn-icon" title="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-desc">Select an ezCheckPrinting <code>.mdb</code> file to import account settings, check layout, and check history. This will replace existing data.</p>
+      <div class="form-group">
+        <label for="import-file">File</label>
+        <input type="file" id="import-file" accept=".mdb">
+      </div>
+      <div id="import-log" class="import-log" hidden></div>
+    </div>
+    <div class="modal-footer">
+      <button id="btn-run-import" class="btn-primary">Import</button>
+      <button id="btn-cancel-import" class="btn-ghost">Cancel</button>
+    </div>
+  </div>
 
   <script src="/js/app.js"></script>
 </body>
