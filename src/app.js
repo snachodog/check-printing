@@ -2,8 +2,13 @@
 
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
+const { execFileSync } = require('child_process');
+const multer = require('multer');
 
 const app = express();
+const upload = multer({ dest: os.tmpdir() });
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
@@ -11,6 +16,27 @@ app.use(express.static(path.join(__dirname, '../public')));
 // Routes
 app.use('/api/checks', require('./routes/checks'));
 app.use('/api/pdf',    require('./routes/pdf'));
+
+// .mdb import endpoint
+app.post('/api/import', upload.single('mdbfile'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
+  const tmpPath = req.file.path;
+  try {
+    const output = execFileSync(
+      process.execPath,
+      [path.join(__dirname, '../migrations/import-mdb.js'), '--file', tmpPath],
+      { encoding: 'utf8', timeout: 120000, env: process.env }
+    );
+    res.json({ success: true, log: output });
+  } catch (err) {
+    res.status(500).json({
+      error: 'Import failed.',
+      log: [err.stdout, err.stderr, err.message].filter(Boolean).join('\n'),
+    });
+  } finally {
+    fs.unlink(tmpPath, () => {});
+  }
+});
 
 // Account info endpoint (read-only for Phase 1)
 app.get('/api/account', (req, res) => {
