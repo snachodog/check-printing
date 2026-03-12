@@ -123,6 +123,11 @@ function generateCheckPdf(account, checks, fields) {
     const bodyFields = fields.filter(f => !f.field_name.startsWith('Stub'));
     const stubFields = fields.filter(f => f.field_name.startsWith('Stub')); // eslint-disable-line no-unused-vars
 
+    // If no logo, company name lines shift left to the logo's starting x position
+    const logoField = bodyFields.find(f => f.field_name === 'Logo');
+    const hasUsableLogo = !!(logoField && account.logo_data);
+    const COMPANY_FIELDS = new Set(['Company Name', 'Company Name2', 'Company Name3', 'Company Name4']);
+
     // We always render 3 slots; empty slots get a blank placeholder
     for (let slot = 0; slot < 3; slot++) {
       const check = checks[slot] || null;
@@ -191,7 +196,12 @@ function generateCheckPdf(account, checks, fields) {
             const value = resolveFieldValue(field.field_name, check, account);
             if (value !== null && value !== undefined && value !== '') {
               setFont(doc, field);
-              renderLines(doc, String(value), pos.x, pos.y, field.font_size || 10);
+              // When no logo, shift company name lines left to the logo's x origin
+              const xIn = (!hasUsableLogo && logoField && COMPANY_FIELDS.has(field.field_name))
+                ? logoField.x_pos
+                : field.x_pos;
+              const renderPos = (xIn === field.x_pos) ? pos : pt(xIn, field.y_pos);
+              renderLines(doc, String(value), renderPos.x, renderPos.y, field.font_size || 10);
             }
             break;
           }
