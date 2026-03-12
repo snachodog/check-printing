@@ -1,8 +1,6 @@
 services:
   check-printing:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
+    image: ${DOCKERHUB_USERNAME}/check-printing:latest
     container_name: check-printing
     restart: unless-stopped
     ports:
