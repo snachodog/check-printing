@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ezcheck</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header>
+    <div class="header-brand">
+      <span id="company-name">ezcheck</span>
+    </div>
+    <div class="header-info">
+      Next check: <strong id="current-check-no">—</strong>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <label for="filter-status">Show:</label>
+      <select id="filter-status">
+        <option value="">All</option>
+        <option value="0" selected>Unprinted</option>
+        <option value="1">Printed</option>
+      </select>
+    </div>
+    <div class="toolbar-right">
+      <button id="btn-generate-pdf" class="btn-primary" disabled>
+        Generate PDF <span id="selected-count" class="badge">0</span>
+      </button>
+      <button id="btn-new-check" class="btn-secondary">+ New Check</button>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table id="checks-table">
+      <thead>
+        <tr>
+          <th class="col-select"></th>
+          <th class="col-no sortable" data-col="check_no"># <span class="sort-indicator"></span></th>
+          <th class="col-date sortable" data-col="check_date">Date <span class="sort-indicator"></span></th>
+          <th class="col-payee sortable" data-col="payee">Payee <span class="sort-indicator"></span></th>
+          <th class="col-amount sortable" data-col="amount">Amount <span class="sort-indicator"></span></th>
+          <th class="col-memo">Memo</th>
+          <th class="col-status">Status</th>
+          <th class="col-actions"></th>
+        </tr>
+      </thead>
+      <tbody id="checks-tbody">
+        <tr class="loading-row"><td colspan="8">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Slide-in panel -->
+  <div id="panel-overlay"></div>
+  <aside id="check-panel">
+    <div class="panel-header">
+      <h2 id="panel-title">New Check</h2>
+      <button id="btn-close-panel" class="btn-icon" title="Close">×</button>
+    </div>
+    <form id="check-form" novalidate>
+      <div class="form-group required">
+        <label for="f-payee">Payee</label>
+        <input type="text" id="f-payee" name="payee" required autocomplete="off">
+      </div>
+      <div class="form-row">
+        <div class="form-group required">
+          <label for="f-amount">Amount ($)</label>
+          <input type="number" id="f-amount" name="amount" required min="0.01" step="0.01" placeholder="0.00">
+        </div>
+        <div class="form-group required">
+          <label for="f-date">Date</label>
+          <input type="date" id="f-date" name="check_date" required>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="f-memo">Memo</label>
+        <input type="text" id="f-memo" name="memo">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="f-note1">Note 1</label>
+          <input type="text" id="f-note1" name="note1">
+        </div>
+        <div class="form-group">
+          <label for="f-note2">Note 2</label>
+          <input type="text" id="f-note2" name="note2">
+        </div>
+      </div>
+      <details class="address-section">
+        <summary>Payee Address</summary>
+        <div class="address-fields">
+          <div class="form-group">
+            <label for="f-addr1">Line 1</label>
+            <input type="text" id="f-addr1" name="payee_address1">
+          </div>
+          <div class="form-group">
+            <label for="f-addr2">Line 2</label>
+            <input type="text" id="f-addr2" name="payee_address2">
+          </div>
+          <div class="form-group">
+            <label for="f-addr3">Line 3</label>
+            <input type="text" id="f-addr3" name="payee_address3">
+          </div>
+          <div class="form-group">
+            <label for="f-addr4">Line 4</label>
+            <input type="text" id="f-addr4" name="payee_address4">
+          </div>
+        </div>
+      </details>
+      <div class="form-actions">
+        <button type="submit" class="btn-primary" id="btn-save">Save Check</button>
+        <button type="button" class="btn-ghost" id="btn-cancel">Cancel</button>
+      </div>
+    </form>
+  </aside>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
