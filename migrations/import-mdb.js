@@ -119,6 +119,8 @@ function normalizeFont(fontName, isBold) {
   return mapped;
 }
 
+// TODO: Support multi-account .mdb import -- run migration per account and associate records with account_id
+
 // ---- Import: T100 (account config) ------------------------------------------
 
 function importAccount() {
@@ -346,15 +348,18 @@ function importChecks() {
 
 function normalizeDate(raw) {
   if (!raw) return null;
-  // mdb-export outputs dates as "MM/DD/YYYY HH:MM:SS" or "YYYY-MM-DD"
-  const mdyMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  // mdb-export outputs dates as "MM/DD/YYYY HH:MM:SS", "MM/DD/YY", or "YYYY-MM-DD"
+  const mdyMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
   if (mdyMatch) {
     const [, m, d, y] = mdyMatch;
-    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    const year = y.length === 2
+      ? (parseInt(y, 10) >= 50 ? '19' : '20') + y
+      : y;
+    return `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
   }
   const isoMatch = raw.match(/^(\d{4}-\d{2}-\d{2})/);
   if (isoMatch) return isoMatch[1];
-  return raw;
+  return null;
 }
 
 // ---- Run --------------------------------------------------------------------

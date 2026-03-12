@@ -87,6 +87,12 @@ app.post('/api/account/setup', (req, res) => {
   res.status(201).json({ success: true });
 });
 
+// TODO: Add multi-account support -- account switcher, per-account routing/logo/layout, account_id FK on checks and layout_fields
+
+// TODO: Add basic auth or simple password gate for any network-exposed deployment
+
+// TODO: Add deposit slip support -- deposits table, PDF generation, ledger, and slide-in entry form
+
 // Account info endpoint (read-only for Phase 1)
 app.get('/api/account', (req, res) => {
   const db = require('./db/database');
