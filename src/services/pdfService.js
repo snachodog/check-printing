@@ -9,8 +9,8 @@
  *
  * Page layout:
  *   - 8.5" × 11" letter page
- *   - Three check slots: each 8.5" wide × 3.667" tall
- *   - MICR line: hardcoded at Y = 3.4" from top of each slot
+ *   - Three check slots: each 8.5" wide × 3.5" tall; remaining ~0.5" is tear-off strip
+ *   - MICR line: hardcoded at Y = 3.233" from top of each slot (0.267" from bottom of check)
  *
  * Coordinate origin for each slot is top-left of that slot.
  */
@@ -22,7 +22,7 @@ const fs = require('fs');
 const POINTS_PER_INCH = 72;
 const PAGE_WIDTH_IN  = 8.5;
 const PAGE_HEIGHT_IN = 11;
-const SLOT_HEIGHT_IN = PAGE_HEIGHT_IN / 3;  // 3.667"
+const SLOT_HEIGHT_IN = 3.5;  // physical check height; remainder (~0.5") is tear-off strip at bottom
 const MICR_Y_IN      = SLOT_HEIGHT_IN - 0.267;  // 0.267" from bottom of slot
 
 // MICR line format: transit symbol (⑆) and on-us symbol (⑈) in E-13B encoding.
@@ -140,13 +140,7 @@ function generateCheckPdf(account, checks, fields) {
         y: (slotOriginY + yIn + offY) * POINTS_PER_INCH,
       });
 
-      if (!check) {
-        // Draw a faint slot boundary line for empty slots (optional, useful for alignment)
-        doc.moveTo(0, slotOriginY * POINTS_PER_INCH)
-           .lineTo(PAGE_WIDTH_IN * POINTS_PER_INCH, slotOriginY * POINTS_PER_INCH)
-           .stroke('#cccccc');
-        continue;
-      }
+      if (!check) continue;
 
       // --- Render each layout field ---
       for (const field of bodyFields) {
@@ -221,14 +215,6 @@ function generateCheckPdf(account, checks, fields) {
            .text(micrLine, micrPos.x, micrPos.y, { lineBreak: false });
       }
 
-      // --- Slot separator line ---
-      if (slot < 2) {
-        const lineY = (slotOriginY + SLOT_HEIGHT_IN) * POINTS_PER_INCH;
-        doc.moveTo(0, lineY)
-           .lineTo(PAGE_WIDTH_IN * POINTS_PER_INCH, lineY)
-           .lineWidth(0.5)
-           .stroke('#999999');
-      }
     }
 
     doc.end();
