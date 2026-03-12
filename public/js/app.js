@@ -28,8 +28,8 @@ async function loadAccount() {
   try {
     state.account = await apiFetch('GET', '/api/account');
     renderHeader();
-  } catch {
-    // account not configured yet — silently skip
+  } catch (err) {
+    if (err.message && err.message.includes('No account')) openWizard();
   }
 }
 
@@ -337,6 +337,112 @@ async function reprintCheck(id) {
   }
 }
 
+// ── Setup wizard ─────────────────────────────────────────────────────────────
+
+const wizard = { step: 1, logoData: null };
+
+function openWizard() {
+  wizard.step = 1;
+  wizard.logoData = null;
+  document.getElementById('w-logo').value = '';
+  document.getElementById('wizard-error').hidden = true;
+  goToWizardStep(1);
+  document.getElementById('wizard-overlay').classList.add('open');
+  document.getElementById('wizard-modal').classList.add('open');
+  document.getElementById('w-company1').focus();
+}
+
+function closeWizard() {
+  document.getElementById('wizard-overlay').classList.remove('open');
+  document.getElementById('wizard-modal').classList.remove('open');
+}
+
+function goToWizardStep(n) {
+  wizard.step = n;
+  [1, 2, 3].forEach(i => {
+    document.getElementById(`wizard-step-${i}`).hidden = i !== n;
+    const dot = document.querySelector(`.wizard-step-dot[data-step="${i}"]`);
+    dot.classList.toggle('active', i === n);
+    dot.classList.toggle('done', i < n);
+  });
+  document.querySelectorAll('.wizard-step-line').forEach((line, idx) => {
+    line.classList.toggle('done', idx < n - 1);
+  });
+  document.getElementById('btn-wizard-prev').hidden = n === 1;
+  document.getElementById('btn-wizard-next').hidden = n === 3;
+  document.getElementById('btn-wizard-finish').hidden = n !== 3;
+  document.getElementById('wizard-error').hidden = true;
+}
+
+function validateWizardStep() {
+  const err = document.getElementById('wizard-error');
+  if (wizard.step === 1) {
+    if (!document.getElementById('w-company1').value.trim()) {
+      err.textContent = 'Organization name is required.';
+      err.hidden = false;
+      document.getElementById('w-company1').focus();
+      return false;
+    }
+  }
+  if (wizard.step === 2) {
+    if (!document.getElementById('w-bank-name').value.trim()) {
+      err.textContent = 'Bank name is required.';
+      err.hidden = false;
+      document.getElementById('w-bank-name').focus();
+      return false;
+    }
+  }
+  if (wizard.step === 3) {
+    const routing = document.getElementById('w-routing').value.trim();
+    const account = document.getElementById('w-account').value.trim();
+    const startNo = document.getElementById('w-start-check').value.trim();
+    if (!routing) { err.textContent = 'Routing number is required.'; err.hidden = false; return false; }
+    if (!account) { err.textContent = 'Account number is required.'; err.hidden = false; return false; }
+    if (!startNo || parseInt(startNo, 10) < 1) { err.textContent = 'Starting check number is required.'; err.hidden = false; return false; }
+  }
+  return true;
+}
+
+async function finishWizard() {
+  if (!validateWizardStep()) return;
+
+  const city    = document.getElementById('w-city').value.trim();
+  const state_  = document.getElementById('w-state').value.trim().toUpperCase();
+  const zip     = document.getElementById('w-zip').value.trim();
+  const cityLine = [city, state_ ? (zip ? `${state_} ${zip}` : state_) : zip].filter(Boolean).join(', ');
+
+  const payload = {
+    company1:    document.getElementById('w-company1').value.trim(),
+    company2:    document.getElementById('w-addr1').value.trim() || null,
+    company3:    cityLine || null,
+    company4:    document.getElementById('w-contact').value.trim() || null,
+    bank_name:   document.getElementById('w-bank-name').value.trim(),
+    bank_info1:  document.getElementById('w-bank-addr').value.trim() || null,
+    bank_info2:  document.getElementById('w-bank-contact').value.trim() || null,
+    transit_code: document.getElementById('w-transit').value.trim() || null,
+    routing_number: document.getElementById('w-routing').value.trim(),
+    account_number: document.getElementById('w-account').value.trim(),
+    start_check_no: parseInt(document.getElementById('w-start-check').value, 10),
+    logo_data:   wizard.logoData || null,
+  };
+
+  const btn = document.getElementById('btn-wizard-finish');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    await apiFetch('POST', '/api/account/setup', payload);
+    closeWizard();
+    await Promise.all([loadAccount(), loadChecks()]);
+  } catch (err) {
+    const errEl = document.getElementById('wizard-error');
+    errEl.textContent = err.message;
+    errEl.hidden = false;
+    btn.disabled = false;
+    btn.textContent = 'Save & Start';
+  }
+}
+
 // ── Import modal ─────────────────────────────────────────────────────────────
 
 function openImportModal() {
@@ -441,6 +547,24 @@ function init() {
 
   // Generate PDF
   document.getElementById('btn-generate-pdf').addEventListener('click', generatePdf);
+
+  // Wizard
+  document.getElementById('btn-wizard-next').addEventListener('click', () => {
+    if (validateWizardStep()) goToWizardStep(wizard.step + 1);
+  });
+  document.getElementById('btn-wizard-prev').addEventListener('click', () => goToWizardStep(wizard.step - 1));
+  document.getElementById('btn-wizard-finish').addEventListener('click', finishWizard);
+  document.getElementById('btn-wizard-skip').addEventListener('click', () => {
+    closeWizard();
+    openImportModal();
+  });
+  document.getElementById('w-logo').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) { wizard.logoData = null; return; }
+    const reader = new FileReader();
+    reader.onload = ev => { wizard.logoData = ev.target.result; };
+    reader.readAsDataURL(file);
+  });
 
   // Import modal
   document.getElementById('btn-import').addEventListener('click', openImportModal);
