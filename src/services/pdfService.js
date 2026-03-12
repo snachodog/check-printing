@@ -97,9 +97,7 @@ function formatMicrLine(routingNo, accountNo, checkNo) {
  */
 function generateCheckPdf(account, checks, fields) {
   return new Promise((resolve, reject) => {
-    console.log(`[pdf] MICR font path: ${MICR_FONT_PATH}`);
     const hasMicrFont = fs.existsSync(MICR_FONT_PATH);
-    console.log(`[pdf] MICR font exists: ${hasMicrFont}`);
 
     const doc = new PDFDocument({
       size: [
@@ -111,14 +109,7 @@ function generateCheckPdf(account, checks, fields) {
     });
 
     if (hasMicrFont) {
-      try {
-        doc.registerFont('MICR', MICR_FONT_PATH);
-        console.log('[pdf] MICR font registered successfully');
-      } catch (err) {
-        console.error(`[pdf] MICR font registration failed: ${err.message}`);
-      }
-    } else {
-      console.warn(`[pdf] MICR font not found — falling back to Courier`);
+      doc.registerFont('MICR', MICR_FONT_PATH);
     }
 
     const buffers = [];
@@ -212,14 +203,8 @@ function generateCheckPdf(account, checks, fields) {
       const micrPos = pt(0.3, MICR_Y_IN);
 
       if (hasMicrFont) {
-        try {
-          doc.font('MICR').fontSize(12).fillColor('#000000')
-             .text(micrLine, micrPos.x, micrPos.y, { lineBreak: false });
-        } catch (err) {
-          console.error(`[pdf] Failed to render MICR font on slot ${slot}: ${err.message}`);
-          doc.font('Courier').fontSize(10).fillColor('#000000')
-             .text(micrLine, micrPos.x, micrPos.y, { lineBreak: false });
-        }
+        doc.font('MICR').fontSize(12).fillColor('#000000')
+           .text(micrLine, micrPos.x, micrPos.y, { lineBreak: false });
       } else {
         doc.font('Courier').fontSize(10).fillColor('#000000')
            .text(micrLine, micrPos.x, micrPos.y, { lineBreak: false });
