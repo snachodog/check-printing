@@ -61,5 +61,13 @@ These exist in the original ezCheckPrinting software but are intentionally out o
 - [ ] Multi-account `.mdb` import -- run migration script per account, associate with account record
 - [ ] Import logo from `.mdb` `Settings` table for accounts that have one (already implemented in script, needs UI trigger)
 
+### Deposit slips
+
+- [ ] Deposit slip data model -- deposits table (date, total, line items: source/amount)
+- [ ] Deposit slip PDF generation -- standard bank deposit slip layout
+- [ ] Deposit slip ledger -- list, filter by date range
+- [ ] New deposit form -- slide-in panel, add multiple line items dynamically
+- [ ] Print flow for deposit slips (similar to check flow, mark as printed)
+
 ### Authentication
 - [ ] Basic auth or simple password gate for any deployment that leaves the local network
