@@ -1,7 +1,7 @@
-FROM node:20-alpine
+FROM node:20-slim
 
 # mdbtools for migration script (only needed on first run, stays in image for convenience)
-RUN apk add --no-cache mdbtools
+RUN apt-get update && apt-get install -y --no-install-recommends mdbtools && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
