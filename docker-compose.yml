@@ -1,22 +1,22 @@
 services:
-  ezcheck:
+  check-printing:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    container_name: ezcheck
+    container_name: check-printing
     restart: unless-stopped
     ports:
       - "3000:3000"
     volumes:
       # Persistent data: SQLite DB lives here
-      - ezcheck-data:/app/data
+      - check-printing-data:/app/data
       - ./fonts:/app/fonts:ro
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - DB_PATH=/app/data/ezcheck.db
+      - DB_PATH=/app/data/check-printing.db
       # Full path to MICR font inside container
       - MICR_FONT_PATH=${MICR_FONT_PATH}
 
 volumes:
-  ezcheck-data:
+  check-printing-data:
