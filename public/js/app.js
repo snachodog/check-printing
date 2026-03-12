@@ -294,7 +294,9 @@ async function generatePdf() {
 
   const btn = document.getElementById('btn-generate-pdf');
   btn.disabled = true;
-  btn.textContent = 'Generating…';
+  const countSpan = document.getElementById('selected-count');
+  const savedCount = countSpan.textContent;
+  countSpan.textContent = '…';
 
   try {
     const res = await fetch('/api/pdf', {
@@ -310,9 +312,9 @@ async function generatePdf() {
     window.open(URL.createObjectURL(blob), '_blank');
     await loadChecks(); // refresh to show printed status
   } catch (err) {
+    countSpan.textContent = savedCount;
+    btn.disabled = false;
     alert(`PDF error: ${err.message}`);
-  } finally {
-    refreshPdfButton();
   }
 }
 

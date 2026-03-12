@@ -2,23 +2,23 @@
 
 ## MVP
 
-- [ ] Build `public/index.html` -- app shell, header with company name and current check number
-- [ ] Build `public/css/style.css` -- functional, dense layout; ledger table is primary view
-- [ ] Build `public/js/app.js` -- all frontend logic via `fetch()`
-- [ ] Check ledger table -- columns: check #, date, payee, amount, memo, printed status
-- [ ] Ledger: filter by printed / unprinted
-- [ ] Ledger: sort by check number and date
-- [ ] New check form -- fields: payee, amount, date, memo, note1, note2; address fields collapsed by default
-- [ ] New check form -- slide-in panel or modal, not a separate page
-- [ ] Edit mode for unprinted checks (inline or same panel as new check form)
-- [ ] Checkbox selection of 1--3 checks for print; enforce the 3-check maximum in the UI
-- [ ] "Generate PDF" button -- POST to `/api/pdf`, open resulting PDF in a new browser tab
-- [ ] Reprint flow -- allow re-generating PDF for already-printed checks without re-marking (`?mark_printed=false`)
-- [ ] Delete confirmation for unprinted checks
-- [ ] Basic error display for API failures (failed PDF generation, validation errors)
-- [ ] Amount input validation -- numeric, two decimal places, greater than zero
-- [ ] Date input defaults to today
-- [ ] Check number display -- show next check number on new check form (read from account)
+- [x] Build `public/index.html` -- app shell, header with company name and current check number
+- [x] Build `public/css/style.css` -- functional, dense layout; ledger table is primary view
+- [x] Build `public/js/app.js` -- all frontend logic via `fetch()`
+- [x] Check ledger table -- columns: check #, date, payee, amount, memo, printed status
+- [x] Ledger: filter by printed / unprinted
+- [x] Ledger: sort by check number and date
+- [x] New check form -- fields: payee, amount, date, memo, note1, note2; address fields collapsed by default
+- [x] New check form -- slide-in panel or modal, not a separate page
+- [x] Edit mode for unprinted checks (inline or same panel as new check form)
+- [x] Checkbox selection of 1--3 checks for print; enforce the 3-check maximum in the UI
+- [x] "Generate PDF" button -- POST to `/api/pdf`, open resulting PDF in a new browser tab
+- [x] Reprint flow -- allow re-generating PDF for already-printed checks without re-marking (`?mark_printed=false`)
+- [x] Delete confirmation for unprinted checks
+- [x] Basic error display for API failures (failed PDF generation, validation errors)
+- [x] Amount input validation -- numeric, two decimal places, greater than zero
+- [x] Date input defaults to today
+- [x] Check number display -- show next check number on new check form (read from account)
 - [ ] Run migration against `Montana Dinosaur Center.mdb` and verify all check records import correctly
 - [ ] Verify PDF output: spot-check field positions against a printed check from the original software
 - [ ] Verify MICR line renders using GnuMICR.otf and lands at correct Y position

@@ -28,9 +28,7 @@ const MICR_Y_IN      = SLOT_HEIGHT_IN - 0.267;  // 0.267" from bottom of slot
 // MICR line format: transit symbol (⑆) and on-us symbol (⑈) in E-13B encoding.
 // The GnuMICR / micrenc font maps these to specific characters.
 // Standard MICR layout: [check#] ⑆[routing]⑆ [account#]⑈
-const MICR_FONT_PATH = process.env.MICR_FONT_PATH
-  ? path.resolve(process.env.MICR_FONT_PATH)
-  : path.join(__dirname, '../../fonts/micrenc.ttf');
+const MICR_FONT_PATH = path.join(__dirname, '../../fonts/GnuMICR.otf');
 
 // Amount in words conversion
 function amountToWords(amount) {
@@ -121,9 +119,11 @@ function generateCheckPdf(account, checks, fields) {
     doc.on('end', () => resolve(Buffer.concat(buffers)));
     doc.on('error', reject);
 
+    // TODO: Add 1-up with stub layout -- render Stub-prefixed fields from layout_fields alongside the check body
+
     // Separate layout fields into check body vs stub fields
     const bodyFields = fields.filter(f => !f.field_name.startsWith('Stub'));
-    const stubFields = fields.filter(f => f.field_name.startsWith('Stub'));
+    const stubFields = fields.filter(f => f.field_name.startsWith('Stub')); // eslint-disable-line no-unused-vars
 
     // We always render 3 slots; empty slots get a blank placeholder
     for (let slot = 0; slot < 3; slot++) {
@@ -260,6 +260,8 @@ function resolveFieldValue(fieldName, check, account) {
       return null;
   }
 }
+
+// TODO: Add visual layout editor -- UI to nudge field X/Y positions and printer offset calibration (offset_left/right/up/down)
 
 /**
  * Sets the PDFKit font based on a layout field's font properties.

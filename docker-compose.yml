@@ -1,6 +1,6 @@
 services:
   check-printing:
-    image: ${DOCKERHUB_USERNAME}/check-printing:latest
+    image: dogiakos/check-printing:latest
     container_name: check-printing
     restart: unless-stopped
     ports:
@@ -8,13 +8,10 @@ services:
     volumes:
       # Persistent data: SQLite DB lives here
       - check-printing-data:/app/data
-      - ./fonts:/app/fonts:ro
     environment:
       - NODE_ENV=production
       - PORT=3000
       - DB_PATH=/app/data/check-printing.db
-      # Full path to MICR font inside container
-      - MICR_FONT_PATH=${MICR_FONT_PATH}
 
 volumes:
   check-printing-data:

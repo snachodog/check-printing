@@ -4,6 +4,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/database');
 
+// TODO: Add ledger reporting -- date range filter, payee search, total amount display, CSV export
+
 // GET /api/checks - list all checks, newest first
 router.get('/', (req, res) => {
   const { after, printed } = req.query;
@@ -35,6 +37,8 @@ router.get('/:id', (req, res) => {
   if (!check) return res.status(404).json({ error: 'Check not found' });
   res.json(check);
 });
+
+// TODO: Add payee address book -- store and recall payee name + address lines, autocomplete on new check form
 
 // POST /api/checks - create a new check
 router.post('/', (req, res) => {
