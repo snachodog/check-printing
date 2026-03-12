@@ -137,3 +137,14 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+data/
+*.db
+*.db-shm
+*.db-wal
+fonts/*.ttf
+fonts/*.otf
+
+#AI
+CLAUDE.md
+/.claude

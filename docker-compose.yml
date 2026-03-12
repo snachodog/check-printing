@@ -1,0 +1,22 @@
+services:
+  ezcheck:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: ezcheck
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Persistent data: SQLite DB lives here
+      - ezcheck-data:/app/data
+      - ./fonts:/app/fonts:ro
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_PATH=/app/data/ezcheck.db
+      # Full path to MICR font inside container
+      - MICR_FONT_PATH=${MICR_FONT_PATH}
+
+volumes:
+  ezcheck-data:
