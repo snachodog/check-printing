@@ -411,3 +411,77 @@ input[type="file"] {
   padding: 12px 16px;
   border-top: 1px solid var(--border);
 }
+
+/* ── Setup wizard ── */
+.wizard-modal { width: 520px; }
+
+.wizard-steps-indicator {
+  display: flex;
+  align-items: center;
+  padding: 16px 24px 0;
+  background: var(--surface);
+}
+.wizard-step-dot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.wizard-step-dot span {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.wizard-step-dot.active span,
+.wizard-step-dot.done span {
+  background: var(--primary);
+  color: #fff;
+}
+.wizard-step-dot label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.wizard-step-dot.active label { color: var(--primary); }
+.wizard-step-line {
+  flex: 1;
+  height: 2px;
+  background: var(--border);
+  margin: 0 8px;
+  margin-bottom: 18px;
+  transition: background 0.15s;
+}
+.wizard-step-line.done { background: var(--primary); }
+
+.wizard-body { min-height: 240px; }
+
+.wizard-error {
+  margin-top: 4px;
+  padding: 8px 10px;
+  background: #fee2e2;
+  color: var(--danger);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.wizard-footer { justify-content: flex-end; }
+.wizard-footer .btn-ghost { margin-right: auto; font-size: 12px; }
+
+.form-row-3 { grid-template-columns: 1fr 80px 100px; }
+.field-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}

@@ -38,6 +38,55 @@ app.post('/api/import', upload.single('mdbfile'), (req, res) => {
   }
 });
 
+// Account setup endpoint (first-run wizard)
+app.post('/api/account/setup', (req, res) => {
+  const db = require('./db/database');
+  const existing = db.prepare('SELECT id FROM account WHERE id = 1').get();
+  if (existing) return res.status(409).json({ error: 'Account already configured.' });
+
+  const {
+    company1, company2, company3, company4,
+    bank_name, bank_info1, bank_info2, transit_code,
+    routing_number, account_number, start_check_no, logo_data,
+  } = req.body;
+
+  if (!company1 || !routing_number || !account_number || !start_check_no) {
+    return res.status(400).json({ error: 'Organization name, routing number, account number, and starting check number are required.' });
+  }
+  const checkNo = parseInt(start_check_no, 10);
+  if (isNaN(checkNo) || checkNo < 1) {
+    return res.status(400).json({ error: 'Starting check number must be a positive integer.' });
+  }
+
+  db.prepare(`
+    INSERT INTO account (
+      bank_name, bank_info1, bank_info2, transit_code,
+      routing_number, account_number, start_check_no, current_check_no,
+      company1, company2, company3, company4, logo_data
+    ) VALUES (
+      @bank_name, @bank_info1, @bank_info2, @transit_code,
+      @routing_number, @account_number, @start_check_no, @current_check_no,
+      @company1, @company2, @company3, @company4, @logo_data
+    )
+  `).run({
+    bank_name:        bank_name || '',
+    bank_info1:       bank_info1 || null,
+    bank_info2:       bank_info2 || null,
+    transit_code:     transit_code || null,
+    routing_number,
+    account_number,
+    start_check_no:   checkNo,
+    current_check_no: checkNo,
+    company1:         company1 || null,
+    company2:         company2 || null,
+    company3:         company3 || null,
+    company4:         company4 || null,
+    logo_data:        logo_data || null,
+  });
+
+  res.status(201).json({ success: true });
+});
+
 // Account info endpoint (read-only for Phase 1)
 app.get('/api/account', (req, res) => {
   const db = require('./db/database');
