@@ -28,7 +28,8 @@ const MICR_Y_IN      = SLOT_HEIGHT_IN - 0.267;  // 0.267" from bottom of slot
 // MICR line format: transit symbol (⑆) and on-us symbol (⑈) in E-13B encoding.
 // The GnuMICR / micrenc font maps these to specific characters.
 // Standard MICR layout: [check#] ⑆[routing]⑆ [account#]⑈
-const MICR_FONT_PATH = path.join(__dirname, '../../fonts/GnuMICR.otf');
+// Use TTF — the OTF is converted from PostScript Type 1 and may not embed correctly in PDFKit
+const MICR_FONT_PATH = path.join(__dirname, '../../fonts/GnuMICR.ttf');
 
 // Amount in words conversion
 function amountToWords(amount) {
@@ -184,8 +185,7 @@ function generateCheckPdf(account, checks, fields) {
             // Static label
             const label = field.field_text || '';
             setFont(doc, field);
-            doc.fillColor('#000000')
-               .text(label, pos.x, pos.y, { lineBreak: false });
+            renderLines(doc, label, pos.x, pos.y, field.font_size || 10);
             break;
           }
 
@@ -194,8 +194,7 @@ function generateCheckPdf(account, checks, fields) {
             const value = resolveFieldValue(field.field_name, check, account);
             if (value !== null && value !== undefined && value !== '') {
               setFont(doc, field);
-              doc.fillColor('#000000')
-                 .text(String(value), pos.x, pos.y, { lineBreak: false });
+              renderLines(doc, String(value), pos.x, pos.y, field.font_size || 10);
             }
             break;
           }
@@ -218,6 +217,19 @@ function generateCheckPdf(account, checks, fields) {
     }
 
     doc.end();
+  });
+}
+
+/**
+ * Renders text at (x, y), splitting on newlines for multi-line fields.
+ * Each line is placed at an explicit Y so PDFKit's internal cursor doesn't drift.
+ */
+function renderLines(doc, text, x, y, fontSize) {
+  const lineHeight = fontSize * 1.2;
+  const lines = text.split('\n');
+  lines.forEach((line, i) => {
+    doc.fillColor('#000000')
+       .text(line, x, y + i * lineHeight, { lineBreak: false });
   });
 }
 
@@ -252,7 +264,7 @@ function resolveFieldValue(fieldName, check, account) {
     case 'Company Name2':
       return account.company2;
     case 'Bank Information':
-      return [account.bank_info1, account.bank_info2, account.bank_info3]
+      return [account.bank_name, account.bank_info1, account.bank_info2, account.bank_info3]
         .filter(Boolean).join('\n');
     case 'Bank Transit Code':
       return account.transit_code;
