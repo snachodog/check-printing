@@ -65,9 +65,6 @@ Use the **Reprint** button on printed checks to regenerate without re-marking th
 - MICR line at 0.267" from bottom of each slot
 - MICR format: `A{routing}A {account}C {checkNo}A` (GnuMICR E-13B encoding)
 
-## CI/CD
-
-Push to `main` triggers a GitHub Actions workflow that builds a multi-arch Docker image (amd64/arm64) and pushes it to Docker Hub as `dogiakos/check-printing:latest`. An ntfy notification is sent on success or failure.
 
 ## Environment variables
 
