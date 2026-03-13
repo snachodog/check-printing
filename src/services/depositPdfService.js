@@ -80,11 +80,11 @@ const SL = {
   // Y positions are the TOP anchor; text flows DOWNWARD from there.
   stripCenterX:     0.32,   // ≈ stripX/2; tune to center text in strip width
 
-  // Order top-to-bottom: "DEPOSIT TOTAL $ X.XX" line → MICR → "TOTAL ITEMS" → count
-  depTotalY:        1.0,    // combined "DEPOSIT TOTAL $ X.XX" rotated text start
-  micrY:            2.5,    // MICR starts here, flows ~2.5" downward
-  checkCountLabelY: 5.5,    // "TOTAL ITEMS" label start
-  checkCountValY:   6.5,    // check count value start
+  // Order top-to-bottom: "DEPOSIT TOTAL $ X.XX" → MICR → "TOTAL ITEMS" → count
+  depTotalY:        0.7,    // combined "DEPOSIT TOTAL $ X.XX" rotated text start
+  micrY:            2.2,    // MICR starts here (~2.4" long at 11pt); ends ~4.6"
+  checkCountLabelY: 5.0,    // "TOTAL ITEMS" label start
+  checkCountValY:   6.1,    // check count value start
 
   // ── Colours ───────────────────────────────────────────────────────────────
   bgLineColor:   '#888888',
@@ -249,10 +249,6 @@ function generateDepositSlip(account, deposit, items) {
     // ── Style A background ──────────────────────────────────────────────────
 
     // No fill on left strip (white/transparent per user preference)
-
-    // Outer border of main content area (right of strip)
-    doc.rect(SL.stripX * PT, 0, (SL.W - SL.stripX) * PT, SL.H * PT)
-       .lineWidth(1).stroke('#000000');
 
     // Vertical divider between check# and amount columns
     const dividerX    = (SL.colCentsR - SL.colCentsW - SL.colDollarSep - 7 * SL.digitW) * PT;
@@ -422,7 +418,7 @@ function generateDepositSlip(account, deposit, items) {
     doc.save();
     doc.translate(SL.stripCenterX * PT, SL.depTotalY * PT);
     doc.rotate(90);
-    doc.font('Helvetica-Bold').fontSize(7).fillColor('#000000')
+    doc.font('Courier').fontSize(7).fillColor('#000000')
        .text(`DEPOSIT TOTAL $  ${fmtDepTotal}`, 0, 0, { lineBreak: false });
     doc.restore();
 
