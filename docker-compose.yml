@@ -4,7 +4,7 @@ services:
     container_name: check-printing
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3003:3000"
     volumes:
       # Persistent data: SQLite DB lives here
       - check-printing-data:/app/data

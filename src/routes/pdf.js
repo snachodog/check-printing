@@ -7,40 +7,44 @@ const { generateCheckPdf } = require('../services/pdfService');
 
 /**
  * POST /api/pdf
- * Body: { checkIds: [1, 2, 3] }  -- 1 to 3 check IDs
+ * Body: { checkIds: [1, 2, ...], account_id: X }
  *
- * Returns a PDF with 1–3 checks in a 3-up layout.
+ * Returns a multi-page PDF (3 checks per page).
  * After successful generation, marks all checks as printed.
- *
- * Query param: ?mark_printed=false to suppress auto-marking (for reprints).
+ * Query param: ?mark_printed=false to suppress auto-marking.
  */
 router.post('/', async (req, res) => {
-  const { checkIds } = req.body;
+  const { checkIds, account_id } = req.body;
 
   if (!Array.isArray(checkIds) || checkIds.length === 0) {
     return res.status(400).json({ error: 'checkIds must be a non-empty array' });
   }
 
-  // Fetch account
-  const account = db.prepare('SELECT * FROM account WHERE id = 1').get();
-  if (!account) {
-    return res.status(500).json({ error: 'No account configured. Run migration first.' });
+  // Fetch checks in the order provided
+  let checks;
+  try {
+    checks = checkIds.map(id => {
+      const check = db.prepare('SELECT * FROM checks WHERE id = ?').get(id);
+      if (!check) throw new Error(`Check ID ${id} not found`);
+      return check;
+    });
+  } catch (err) {
+    return res.status(404).json({ error: err.message });
   }
 
-  // Fetch checks in the order provided
-  const checks = checkIds.map(id => {
-    const check = db.prepare('SELECT * FROM checks WHERE id = ?').get(id);
-    if (!check) throw new Error(`Check ID ${id} not found`);
-    return check;
-  });
+  // Derive account from checks (all should belong to the same account)
+  const resolvedAccountId = account_id || checks[0].account_id;
+  const account = db.prepare('SELECT * FROM account WHERE id = ?').get(resolvedAccountId);
+  if (!account) {
+    return res.status(500).json({ error: 'No account configured.' });
+  }
 
-  // Fetch layout fields (all visible fields)
-  const fields = db.prepare('SELECT * FROM layout_fields WHERE visible = 1').all();
+  // Fetch layout fields for this account
+  const fields = db.prepare('SELECT * FROM layout_fields WHERE account_id = ? AND visible = 1').all(resolvedAccountId);
 
   try {
     const pdfBuffer = await generateCheckPdf(account, checks, fields);
 
-    // Mark as printed unless explicitly suppressed (e.g., reprint)
     const markPrinted = req.query.mark_printed !== 'false';
     if (markPrinted) {
       const placeholders = checkIds.map(() => '?').join(',');
