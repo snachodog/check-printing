@@ -80,11 +80,12 @@ const SL = {
   // Y positions are the TOP anchor; text flows DOWNWARD from there.
   stripCenterX:     0.32,   // ≈ stripX/2; tune to center text in strip width
 
-  micrY:            6.0,    // MICR starts here, flows ~2.4" to bottom
-  depTotalLabelY:   2.2,    // "DEPOSIT TOTAL $" label start
-  depTotalAmtY:     3.3,    // deposit total digits start (each 0.16" apart downward)
-  checkCountLabelY: 4.8,    // "TOTAL ITEMS" label start
-  checkCountValY:   5.7,    // check count value start
+  // Order top-to-bottom: DEPOSIT TOTAL label → digits → MICR → TOTAL ITEMS → count
+  depTotalLabelY:   1.0,    // "DEPOSIT TOTAL $" label start
+  depTotalAmtY:     2.0,    // deposit total digits start (each 0.16" apart downward)
+  micrY:            3.4,    // MICR starts here, flows ~2.5" downward
+  checkCountLabelY: 6.1,    // "TOTAL ITEMS" label start
+  checkCountValY:   6.9,    // check count value start
 
   // ── Colours ───────────────────────────────────────────────────────────────
   bgLineColor:   '#888888',
@@ -219,6 +220,7 @@ function generateDepositSlip(account, deposit, items) {
     // Letter page — slip sits at (slipX, 0); remaining space is blank for trimming
     const doc = new PDFDocument({
       size: 'LETTER',
+      layout: 'portrait',
       margins: { top: 0, bottom: 0, left: 0, right: 0 },
       autoFirstPage: true,
     });
