@@ -607,6 +607,271 @@ async function saveAccountSettings() {
   }
 }
 
+// ── Deposits ─────────────────────────────────────────────────────────────────
+
+const depState = {
+  deposits: [],
+  editingId: null,
+  items: [],   // working list of check rows in the panel
+};
+
+async function loadDeposits() {
+  if (!state.activeAccountId) return;
+  const tbody = document.getElementById('deposits-tbody');
+  tbody.innerHTML = '<tr class="loading-row"><td colspan="8">Loading…</td></tr>';
+  try {
+    depState.deposits = await apiFetch('GET', `/api/deposits?account_id=${state.activeAccountId}`);
+    renderDepositsTable();
+  } catch (err) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="8">Error: ${escHtml(err.message)}</td></tr>`;
+  }
+}
+
+function renderDepositsTable() {
+  const tbody  = document.getElementById('deposits-tbody');
+  const from   = document.getElementById('dep-filter-from').value;
+  const to     = document.getElementById('dep-filter-to').value;
+  const status = document.getElementById('dep-filter-status').value;
+
+  const fmt = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
+  const fmtDate = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+
+  let list = depState.deposits.filter(d => {
+    if (from   && d.deposit_date < from) return false;
+    if (to     && d.deposit_date > to)   return false;
+    if (status === '0' &&  d.printed) return false;
+    if (status === '1' && !d.printed) return false;
+    return true;
+  });
+
+  if (list.length === 0) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="8">No deposits found.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = list.map(d => {
+    const cashTotal    = (d.currency || 0) + (d.coin || 0);
+    const checksTotal  = d.checks_total || 0;
+    const depositTotal = cashTotal + checksTotal - (d.cash_back || 0);
+    const printed      = !!d.printed;
+    const badge        = printed
+      ? '<span class="status-badge status-printed">Printed</span>'
+      : '<span class="status-badge status-unprinted">Unprinted</span>';
+    return `<tr class="${printed ? 'printed' : ''}">
+      <td class="col-date">${fmtDate(d.deposit_date)}</td>
+      <td class="col-amount" style="text-align:right">${fmt(checksTotal)}</td>
+      <td class="col-amount" style="text-align:right">${fmt(cashTotal)}</td>
+      <td class="col-amount" style="text-align:right">${fmt(d.cash_back)}</td>
+      <td class="col-amount" style="text-align:right"><strong>${fmt(depositTotal)}</strong></td>
+      <td style="text-align:center">${d.item_count || 0}</td>
+      <td class="col-status">${badge}</td>
+      <td class="col-actions">
+        <button class="btn-sm btn-edit dep-btn-edit" data-id="${d.id}">Edit</button>
+        <button class="btn-sm btn-delete dep-btn-delete" data-id="${d.id}">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('.dep-btn-edit').forEach(btn =>
+    btn.addEventListener('click', () => openDepositPanel(parseInt(btn.dataset.id, 10))));
+  tbody.querySelectorAll('.dep-btn-delete').forEach(btn =>
+    btn.addEventListener('click', () => deleteDeposit(parseInt(btn.dataset.id, 10))));
+}
+
+async function openDepositPanel(id = null) {
+  depState.editingId = id;
+  depState.items = [];
+
+  document.getElementById('dep-panel-error').hidden = true;
+  document.getElementById('dep-panel-title').textContent = id ? 'Edit Deposit' : 'New Deposit';
+  document.getElementById('dep-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('dep-currency').value = '';
+  document.getElementById('dep-coin').value = '';
+  document.getElementById('dep-cashback').value = '';
+
+  if (id !== null) {
+    try {
+      const dep = await apiFetch('GET', `/api/deposits/${id}`);
+      document.getElementById('dep-date').value     = dep.deposit_date || '';
+      document.getElementById('dep-currency').value = dep.currency  || '';
+      document.getElementById('dep-coin').value     = dep.coin      || '';
+      document.getElementById('dep-cashback').value = dep.cash_back || '';
+      depState.items = (dep.items || []).map(it => ({ ...it }));
+    } catch (err) {
+      alert('Error loading deposit: ' + err.message);
+      return;
+    }
+  } else {
+    depState.items = [newDepItem()];
+  }
+
+  renderDepItems();
+  recalcDepTotals();
+
+  const slipBtn   = document.getElementById('btn-dep-slip');
+  const reportBtn = document.getElementById('btn-dep-report');
+  slipBtn.disabled   = id === null;
+  reportBtn.disabled = id === null;
+
+  document.getElementById('dep-panel-overlay').classList.add('open');
+  document.getElementById('deposit-panel').classList.add('open');
+  document.getElementById('dep-date').focus();
+}
+
+function closeDepositPanel() {
+  document.getElementById('dep-panel-overlay').classList.remove('open');
+  document.getElementById('deposit-panel').classList.remove('open');
+  depState.editingId = null;
+  depState.items = [];
+}
+
+function newDepItem() {
+  return { _key: Math.random(), check_no: '', bank_no: '', payee: '', memo: '', amount: '' };
+}
+
+function renderDepItems() {
+  const tbody = document.getElementById('dep-items-tbody');
+  tbody.innerHTML = depState.items.map((item, i) => `
+    <tr data-idx="${i}">
+      <td><input class="dep-item-input" data-field="check_no" value="${escHtml(item.check_no || '')}" placeholder="Check #" style="width:70px"></td>
+      <td><input class="dep-item-input" data-field="payee"    value="${escHtml(item.payee    || '')}" placeholder="Payee"   style="width:110px"></td>
+      <td><input class="dep-item-input" data-field="memo"     value="${escHtml(item.memo     || '')}" placeholder="Memo"    style="width:90px"></td>
+      <td><input class="dep-item-input dep-amount-input" data-field="amount" value="${item.amount !== '' ? item.amount : ''}" placeholder="0.00" style="width:80px;text-align:right" type="number" min="0" step="0.01"></td>
+      <td><button class="btn-sm btn-delete dep-item-remove" data-idx="${i}" tabindex="-1">✕</button></td>
+    </tr>
+  `).join('');
+
+  tbody.querySelectorAll('.dep-item-input').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const row = e.target.closest('tr');
+      const idx = parseInt(row.dataset.idx, 10);
+      depState.items[idx][e.target.dataset.field] = e.target.value;
+      if (e.target.dataset.field === 'amount') recalcDepTotals();
+    });
+  });
+  tbody.querySelectorAll('.dep-item-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      depState.items.splice(parseInt(btn.dataset.idx, 10), 1);
+      renderDepItems();
+      recalcDepTotals();
+    });
+  });
+}
+
+function recalcDepTotals() {
+  const fmt = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
+  const currency    = parseFloat(document.getElementById('dep-currency').value)  || 0;
+  const coin        = parseFloat(document.getElementById('dep-coin').value)       || 0;
+  const cashBack    = parseFloat(document.getElementById('dep-cashback').value)   || 0;
+  const cashTotal   = currency + coin;
+  const checksTotal = depState.items.reduce((s, it) => s + (parseFloat(it.amount) || 0), 0);
+  const subTotal    = cashTotal + checksTotal;
+  const grand       = subTotal - cashBack;
+
+  document.getElementById('dep-cash-total').textContent       = fmt(cashTotal);
+  document.getElementById('dep-checks-total').textContent     = fmt(checksTotal);
+  document.getElementById('dep-subtotal').textContent         = fmt(subTotal);
+  document.getElementById('dep-cashback-display').textContent = fmt(cashBack);
+  document.getElementById('dep-grand-total').textContent      = fmt(grand);
+}
+
+async function saveDeposit() {
+  const errEl = document.getElementById('dep-panel-error');
+  errEl.hidden = true;
+
+  const deposit_date = document.getElementById('dep-date').value;
+  if (!deposit_date) {
+    errEl.textContent = 'Deposit date is required.';
+    errEl.hidden = false;
+    return;
+  }
+
+  const payload = {
+    account_id:   state.activeAccountId,
+    deposit_date,
+    currency:  parseFloat(document.getElementById('dep-currency').value)  || 0,
+    coin:      parseFloat(document.getElementById('dep-coin').value)       || 0,
+    cash_back: parseFloat(document.getElementById('dep-cashback').value)   || 0,
+    items: depState.items
+      .filter(it => parseFloat(it.amount) > 0 || it.check_no || it.payee)
+      .map((it, i) => ({
+        sort_order: i,
+        check_no: it.check_no || null,
+        bank_no:  it.bank_no  || null,
+        payee:    it.payee    || null,
+        memo:     it.memo     || null,
+        amount:   parseFloat(it.amount) || 0,
+      })),
+  };
+
+  const btn = document.getElementById('btn-save-deposit');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    let saved;
+    if (depState.editingId !== null) {
+      saved = await apiFetch('PUT', `/api/deposits/${depState.editingId}`, payload);
+    } else {
+      saved = await apiFetch('POST', '/api/deposits', payload);
+    }
+    depState.editingId = saved.id;
+    // Enable PDF buttons now that deposit is saved
+    document.getElementById('btn-dep-slip').disabled   = false;
+    document.getElementById('btn-dep-report').disabled = false;
+    document.getElementById('dep-panel-title').textContent = 'Edit Deposit';
+    await loadDeposits();
+    btn.disabled = false;
+    btn.textContent = 'Save Deposit';
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.hidden = false;
+    btn.disabled = false;
+    btn.textContent = 'Save Deposit';
+  }
+}
+
+async function deleteDeposit(id) {
+  const dep = depState.deposits.find(d => d.id === id);
+  const label = dep ? dep.deposit_date : `#${id}`;
+  if (!confirm(`Delete deposit from ${label}?`)) return;
+  try {
+    await apiFetch('DELETE', `/api/deposits/${id}`);
+    await loadDeposits();
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+async function generateDepositPdf(type) {
+  if (!depState.editingId) return;
+  const btn = type === 'slip'
+    ? document.getElementById('btn-dep-slip')
+    : document.getElementById('btn-dep-report');
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = '…';
+  try {
+    const res = await fetch('/api/deposit-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ depositId: depState.editingId, type, mark_printed: type === 'slip' }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || res.statusText);
+    }
+    const blob = await res.blob();
+    window.open(URL.createObjectURL(blob), '_blank');
+    if (type === 'slip') await loadDeposits();
+  } catch (err) {
+    alert('PDF error: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
 // ── Utilities ────────────────────────────────────────────────────────────────
 
 function escHtml(str) {
@@ -712,6 +977,41 @@ function init() {
       preview.hidden = false;
     };
     reader.readAsDataURL(file);
+  });
+
+  // View tabs (Checks / Deposits)
+  document.querySelectorAll('.view-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const view = tab.dataset.view;
+      document.getElementById('view-checks').hidden   = view !== 'checks';
+      document.getElementById('view-deposits').hidden = view !== 'deposits';
+      if (view === 'deposits') loadDeposits();
+    });
+  });
+
+  // Deposit filters
+  document.getElementById('dep-filter-from').addEventListener('change', renderDepositsTable);
+  document.getElementById('dep-filter-to').addEventListener('change', renderDepositsTable);
+  document.getElementById('dep-filter-status').addEventListener('change', renderDepositsTable);
+
+  // Deposit panel
+  document.getElementById('btn-new-deposit').addEventListener('click', () => openDepositPanel());
+  document.getElementById('btn-close-dep-panel').addEventListener('click', closeDepositPanel);
+  document.getElementById('btn-cancel-deposit').addEventListener('click', closeDepositPanel);
+  document.getElementById('dep-panel-overlay').addEventListener('click', closeDepositPanel);
+  document.getElementById('btn-save-deposit').addEventListener('click', saveDeposit);
+  document.getElementById('btn-add-dep-item').addEventListener('click', () => {
+    depState.items.push(newDepItem());
+    renderDepItems();
+  });
+  document.getElementById('btn-dep-slip').addEventListener('click',   () => generateDepositPdf('slip'));
+  document.getElementById('btn-dep-report').addEventListener('click', () => generateDepositPdf('report'));
+
+  // Deposit panel live recalc
+  ['dep-currency', 'dep-coin', 'dep-cashback'].forEach(id => {
+    document.getElementById(id).addEventListener('input', recalcDepTotals);
   });
 
   // Initial data load

@@ -1,6 +1,6 @@
 # check-printing
 
-Self-hosted web app for printing checks on blank check stock. A Dockerized Node.js web app accessible on the local network.
+Self-hosted web app for printing checks and bank deposit slips. A containerized Node.js web app accessible on the local network.
 
 ## Stack
 
@@ -57,6 +57,26 @@ The script imports account config (T100), logo (Settings), check layout (T200), 
 4. Print from the browser; checks are marked as printed in the ledger
 
 Use the **Reprint** button on printed checks to regenerate without re-marking them.
+
+## Deposit slips
+
+Switch to the **Deposits** tab in the toolbar to manage bank deposits.
+
+1. Click **+ New Deposit** to open the deposit entry panel
+2. Enter the deposit date, currency, coin, and cash back amounts
+3. Add each check being deposited (check number, payee, memo, amount) — totals update live
+4. Click **Save Deposit**, then **Deposit Slip** or **Report** to generate a PDF
+
+**Deposit Slip** generates a precisely positioned 3.375" × 8.5" PDF matching physical bank deposit slip stock, including:
+
+- Style A background (form lines and labels drawn server-side — no preprinted stock required)
+- Digit-column amount formatting
+- Routing/account line in E-13B magnetic ink character recognition font, rotated 90°
+- Rotated deposit total and check count in the left margin
+
+**Deposit Report** generates a plain formatted ledger document listing all checks, cash totals, and the final deposit amount — suitable for filing.
+
+Generating a deposit slip marks the deposit as printed in the ledger.
 
 ## Check layout
 

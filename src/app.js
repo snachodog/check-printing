@@ -14,8 +14,10 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
 // Routes
-app.use('/api/checks', require('./routes/checks'));
-app.use('/api/pdf',    require('./routes/pdf'));
+app.use('/api/checks',      require('./routes/checks'));
+app.use('/api/pdf',         require('./routes/pdf'));
+app.use('/api/deposits',    require('./routes/deposits'));
+app.use('/api/deposit-pdf', require('./routes/deposit-pdf'));
 
 // GET /api/accounts - list all accounts (id + display name)
 app.get('/api/accounts', (req, res) => {
