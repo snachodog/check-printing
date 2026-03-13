@@ -80,12 +80,11 @@ const SL = {
   // Y positions are the TOP anchor; text flows DOWNWARD from there.
   stripCenterX:     0.32,   // ≈ stripX/2; tune to center text in strip width
 
-  // Order top-to-bottom: DEPOSIT TOTAL label → digits → MICR → TOTAL ITEMS → count
-  depTotalLabelY:   1.0,    // "DEPOSIT TOTAL $" label start
-  depTotalAmtY:     2.0,    // deposit total digits start (each 0.16" apart downward)
-  micrY:            3.4,    // MICR starts here, flows ~2.5" downward
-  checkCountLabelY: 6.1,    // "TOTAL ITEMS" label start
-  checkCountValY:   6.9,    // check count value start
+  // Order top-to-bottom: "DEPOSIT TOTAL $ X.XX" line → MICR → "TOTAL ITEMS" → count
+  depTotalY:        1.0,    // combined "DEPOSIT TOTAL $ X.XX" rotated text start
+  micrY:            2.5,    // MICR starts here, flows ~2.5" downward
+  checkCountLabelY: 5.5,    // "TOTAL ITEMS" label start
+  checkCountValY:   6.5,    // check count value start
 
   // ── Colours ───────────────────────────────────────────────────────────────
   bgLineColor:   '#888888',
@@ -217,10 +216,11 @@ function generateDepositSlip(account, deposit, items) {
   return new Promise((resolve, reject) => {
     const hasMicrFont = fs.existsSync(MICR_FONT_PATH);
 
-    // Letter page — slip sits at (slipX, 0); remaining space is blank for trimming
+    // Landscape letter page (11"×8.5") — slip is drawn portrait in the left 3.375"
+    // and the remaining ~7.6" to the right is blank for trimming.
     const doc = new PDFDocument({
       size: 'LETTER',
-      layout: 'portrait',
+      layout: 'landscape',
       margins: { top: 0, bottom: 0, left: 0, right: 0 },
       autoFirstPage: true,
     });
@@ -415,16 +415,16 @@ function generateDepositSlip(account, deposit, items) {
     }
     doc.restore();
 
-    // "DEPOSIT TOTAL $" label
+    // Combined "DEPOSIT TOTAL $  X,XXX.XX" — single rotated text line
+    const fmtDepTotal = depositTotal.toLocaleString('en-US', {
+      minimumFractionDigits: 2, maximumFractionDigits: 2,
+    });
     doc.save();
-    doc.translate(SL.stripCenterX * PT, SL.depTotalLabelY * PT);
+    doc.translate(SL.stripCenterX * PT, SL.depTotalY * PT);
     doc.rotate(90);
-    doc.font('Helvetica').fontSize(6).fillColor(SL.bgLabelColor)
-       .text('DEPOSIT TOTAL $', 0, 0, { lineBreak: false });
+    doc.font('Helvetica-Bold').fontSize(7).fillColor('#000000')
+       .text(`DEPOSIT TOTAL $  ${fmtDepTotal}`, 0, 0, { lineBreak: false });
     doc.restore();
-
-    // Deposit total digits (includes decimal point)
-    drawRotatedDigitAmount(doc, depositTotal, SL.stripCenterX, SL.depTotalAmtY);
 
     // "TOTAL ITEMS" label
     doc.save();
