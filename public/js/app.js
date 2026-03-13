@@ -97,11 +97,15 @@ function renderTable() {
   if (checks.length === 0) {
     tbody.innerHTML = '<tr class="empty-row"><td colspan="8">No checks found.</td></tr>';
     updateSortIndicators();
+    updateSelectAll();
+    updateChecksSummary();
     return;
   }
 
   tbody.innerHTML = checks.map(renderRow).join('');
   updateSortIndicators();
+  updateSelectAll();
+  updateChecksSummary();
 
   // Attach row-level event listeners
   tbody.querySelectorAll('input[type="checkbox"]').forEach(cb => {
@@ -188,6 +192,36 @@ function updateSortIndicators() {
   });
 }
 
+function updateSelectAll() {
+  const selectAll = document.getElementById('select-all-checks');
+  const checks = filteredAndSortedChecks();
+  if (checks.length === 0) {
+    selectAll.checked = false;
+    selectAll.indeterminate = false;
+    return;
+  }
+  const nSelected = checks.filter(c => state.selected.has(c.id)).length;
+  selectAll.indeterminate = nSelected > 0 && nSelected < checks.length;
+  selectAll.checked = nSelected === checks.length;
+}
+
+function updateChecksSummary() {
+  const el = document.getElementById('checks-summary');
+  const filtered = filteredAndSortedChecks();
+  const all = state.checks.length;
+  const fmt = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
+
+  if (all === 0) { el.textContent = ''; return; }
+
+  const filteredTotal = filtered.reduce((s, c) => s + (parseFloat(c.amount) || 0), 0);
+  const isFiltered = filtered.length < all;
+  if (isFiltered) {
+    el.textContent = `${filtered.length} of ${all} checks  ·  ${fmt(filteredTotal)}`;
+  } else {
+    el.textContent = `${all} check${all !== 1 ? 's' : ''}  ·  ${fmt(filteredTotal)}`;
+  }
+}
+
 
 function refreshPdfButton() {
   const n = state.selected.size;
@@ -206,6 +240,7 @@ function onCheckboxChange(cb) {
     state.selected.delete(id);
   }
   refreshPdfButton();
+  updateSelectAll();
 }
 
 // ── Slide-in panel ───────────────────────────────────────────────────────────
@@ -914,6 +949,18 @@ function init() {
   document.getElementById('filter-status').addEventListener('change', e => {
     state.filterStatus = e.target.value;
     renderTable();
+  });
+
+  // Select-all checkbox
+  document.getElementById('select-all-checks').addEventListener('change', e => {
+    const checks = filteredAndSortedChecks();
+    if (e.target.checked) {
+      checks.forEach(c => state.selected.add(c.id));
+    } else {
+      checks.forEach(c => state.selected.delete(c.id));
+    }
+    renderTable();
+    refreshPdfButton();
   });
 
   // New check
