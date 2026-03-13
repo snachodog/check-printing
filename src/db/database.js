@@ -93,4 +93,10 @@ if (!lfInfo.some(c => c.name === 'account_id')) {
   `);
 }
 
+// Create account_id indexes unconditionally (safe after migrations have run)
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_checks_account ON checks(account_id);
+  CREATE INDEX IF NOT EXISTS idx_layout_account ON layout_fields(account_id);
+`);
+
 module.exports = db;
