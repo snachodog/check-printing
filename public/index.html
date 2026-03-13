@@ -16,6 +16,14 @@
     <span class="header-info">Next check: <strong id="current-check-no">—</strong></span>
   </header>
 
+  <!-- View nav tabs -->
+  <nav class="view-nav">
+    <button class="view-tab active" data-view="checks">Checks</button>
+    <button class="view-tab" data-view="deposits">Deposits</button>
+  </nav>
+
+  <!-- Checks view -->
+  <div id="view-checks" class="view-pane">
   <div class="toolbar">
     <div class="toolbar-left">
       <input type="search" id="filter-payee" placeholder="Search payee…" style="width:160px">
@@ -56,6 +64,45 @@
       </tbody>
     </table>
   </div>
+  </div><!-- /view-checks -->
+
+  <!-- Deposits view -->
+  <div id="view-deposits" class="view-pane" hidden>
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <input type="date" id="dep-filter-from" title="From date">
+      <span style="color:var(--text-muted)">–</span>
+      <input type="date" id="dep-filter-to" title="To date">
+      <select id="dep-filter-status">
+        <option value="" selected>All</option>
+        <option value="0">Unprinted</option>
+        <option value="1">Printed</option>
+      </select>
+    </div>
+    <div class="toolbar-right">
+      <button id="btn-new-deposit" class="btn-secondary">+ New Deposit</button>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table id="deposits-table">
+      <thead>
+        <tr>
+          <th class="col-date">Date</th>
+          <th class="col-amount" style="text-align:right">Checks Total</th>
+          <th class="col-amount" style="text-align:right">Cash</th>
+          <th class="col-amount" style="text-align:right">Cash Back</th>
+          <th class="col-amount" style="text-align:right">Deposit Total</th>
+          <th style="width:50px;text-align:center">Items</th>
+          <th class="col-status">Status</th>
+          <th class="col-actions"></th>
+        </tr>
+      </thead>
+      <tbody id="deposits-tbody">
+        <tr class="loading-row"><td colspan="8">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+  </div><!-- /view-deposits -->
 
   <!-- Slide-in panel -->
   <div id="panel-overlay"></div>
@@ -333,6 +380,80 @@
       <button id="btn-cancel-acct-settings" class="btn-ghost">Cancel</button>
     </div>
   </div>
+
+  <!-- Deposit slide-in panel -->
+  <div id="dep-panel-overlay"></div>
+  <aside id="deposit-panel">
+    <div class="panel-header">
+      <h2 id="dep-panel-title">New Deposit</h2>
+      <button id="btn-close-dep-panel" class="btn-icon" title="Close">×</button>
+    </div>
+    <div id="deposit-panel-body">
+      <!-- Top section: date + cash fields -->
+      <div class="dep-summary">
+        <div class="form-row">
+          <div class="form-group required">
+            <label for="dep-date">Deposit Date</label>
+            <input type="date" id="dep-date">
+          </div>
+          <div class="form-group">
+            <label for="dep-currency">Currency ($)</label>
+            <input type="number" id="dep-currency" min="0" step="0.01" placeholder="0.00">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="dep-coin">Coin ($)</label>
+            <input type="number" id="dep-coin" min="0" step="0.01" placeholder="0.00">
+          </div>
+          <div class="form-group">
+            <label for="dep-cashback">Cash Back ($)</label>
+            <input type="number" id="dep-cashback" min="0" step="0.01" placeholder="0.00">
+          </div>
+        </div>
+        <div class="dep-totals">
+          <div class="dep-total-row"><span>Cash Total</span><span id="dep-cash-total">$0.00</span></div>
+          <div class="dep-total-row"><span>Checks Total</span><span id="dep-checks-total">$0.00</span></div>
+          <div class="dep-total-row"><span>Subtotal</span><span id="dep-subtotal">$0.00</span></div>
+          <div class="dep-total-row"><span>Cash Back</span><span id="dep-cashback-display">$0.00</span></div>
+          <div class="dep-total-row dep-total-grand"><span>Deposit Total</span><span id="dep-grand-total">$0.00</span></div>
+        </div>
+      </div>
+
+      <!-- Check items grid -->
+      <div class="dep-checks-section">
+        <div class="dep-checks-header">
+          <span>Checks</span>
+          <button type="button" id="btn-add-dep-item" class="btn-sm btn-secondary">+ Add Row</button>
+        </div>
+        <table class="dep-items-table">
+          <thead>
+            <tr>
+              <th>Check #</th>
+              <th>Payee</th>
+              <th>Memo</th>
+              <th style="text-align:right">Amount</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="dep-items-tbody"></tbody>
+        </table>
+      </div>
+
+      <div id="dep-panel-error" class="wizard-error" hidden></div>
+
+      <div class="form-actions dep-form-actions">
+        <div class="dep-pdf-btns">
+          <button type="button" id="btn-dep-slip" class="btn-secondary" disabled>Deposit Slip</button>
+          <button type="button" id="btn-dep-report" class="btn-secondary" disabled>Report</button>
+        </div>
+        <div>
+          <button type="button" id="btn-save-deposit" class="btn-primary">Save Deposit</button>
+          <button type="button" id="btn-cancel-deposit" class="btn-ghost">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </aside>
 
   <script src="/js/app.js"></script>
 </body>

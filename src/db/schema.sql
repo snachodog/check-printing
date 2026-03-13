@@ -71,3 +71,28 @@ CREATE TABLE IF NOT EXISTS layout_fields (
 CREATE INDEX IF NOT EXISTS idx_checks_date      ON checks(check_date);
 CREATE INDEX IF NOT EXISTS idx_checks_printed   ON checks(printed);
 CREATE INDEX IF NOT EXISTS idx_checks_check_no  ON checks(check_no);
+
+CREATE TABLE IF NOT EXISTS deposits (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id    INTEGER NOT NULL REFERENCES account(id),
+  deposit_date  TEXT NOT NULL,
+  currency      REAL NOT NULL DEFAULT 0,
+  coin          REAL NOT NULL DEFAULT 0,
+  cash_back     REAL NOT NULL DEFAULT 0,
+  printed       INTEGER NOT NULL DEFAULT 0,
+  add_date      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS deposit_items (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  deposit_id  INTEGER NOT NULL REFERENCES deposits(id) ON DELETE CASCADE,
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  check_no    TEXT,
+  bank_no     TEXT,
+  payee       TEXT,
+  memo        TEXT,
+  amount      REAL NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_deposits_account ON deposits(account_id);
+CREATE INDEX IF NOT EXISTS idx_deposit_items    ON deposit_items(deposit_id);

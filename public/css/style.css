@@ -535,3 +535,163 @@ input[type="file"] {
   max-height: calc(100vh - 160px);
   overflow-y: auto;
 }
+
+/* ── View nav tabs ── */
+.view-nav {
+  display: flex;
+  gap: 0;
+  background: var(--surface);
+  border-bottom: 2px solid var(--border);
+  flex-shrink: 0;
+  padding: 0 1rem;
+}
+.view-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-bottom: -2px;
+}
+.view-tab:hover { color: var(--text); }
+.view-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* ── View panes ── */
+.view-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+.view-pane[hidden] { display: none; }
+
+/* ── Deposit panel ── */
+#dep-panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+#dep-panel-overlay.open { opacity: 1; pointer-events: auto; }
+
+#deposit-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 560px;
+  max-width: 98vw;
+  height: 100vh;
+  background: var(--surface);
+  z-index: 101;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.15);
+  transform: translateX(100%);
+  transition: transform 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+#deposit-panel.open { transform: translateX(0); }
+
+#deposit-panel-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+}
+
+.dep-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dep-totals {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.dep-total-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.dep-total-grand {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+/* Deposit check items table */
+.dep-checks-section { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.dep-checks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.dep-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.dep-items-table thead th {
+  background: #f8f8f8;
+  border-bottom: 1px solid var(--border);
+  padding: 4px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+  position: static;
+}
+.dep-items-table td {
+  padding: 2px 4px;
+  vertical-align: middle;
+  border-bottom: 1px solid #f0f0f0;
+}
+.dep-item-input {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-size: 12px;
+  font-family: var(--font);
+  background: var(--surface);
+  color: var(--text);
+}
+.dep-item-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.dep-form-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+  flex-wrap: wrap;
+}
+.dep-pdf-btns { display: flex; gap: 6px; }
