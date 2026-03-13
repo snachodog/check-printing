@@ -512,6 +512,101 @@ async function runImport() {
   }
 }
 
+// ── Account settings modal ───────────────────────────────────────────────────
+
+const acctSettings = { logoData: null };
+
+function openAccountSettings() {
+  const a = state.account;
+  if (!a) return;
+
+  acctSettings.logoData = null;
+
+  const f = document.getElementById('acct-settings-form');
+  f.elements.company1.value    = a.company1 || '';
+  f.elements.company2.value    = a.company2 || '';
+  f.elements.company3.value    = a.company3 || '';
+  f.elements.company4.value    = a.company4 || '';
+  f.elements.bank_name.value   = a.bank_name || '';
+  f.elements.bank_info1.value  = a.bank_info1 || '';
+  f.elements.bank_info2.value  = a.bank_info2 || '';
+  f.elements.transit_code.value = a.transit_code || '';
+  f.elements.routing_number.value = a.routing_number || '';
+  f.elements.account_number.value = a.account_number || '';
+  f.elements.offset_left.value  = a.offset_left  || 0;
+  f.elements.offset_right.value = a.offset_right || 0;
+  f.elements.offset_up.value    = a.offset_up    || 0;
+  f.elements.offset_down.value  = a.offset_down  || 0;
+
+  document.getElementById('as-logo').value = '';
+  document.getElementById('as-logo-preview').hidden = true;
+  document.getElementById('acct-settings-error').hidden = true;
+  document.getElementById('btn-save-acct-settings').disabled = false;
+  document.getElementById('btn-save-acct-settings').textContent = 'Save Changes';
+
+  document.getElementById('acct-settings-overlay').classList.add('open');
+  document.getElementById('acct-settings-modal').classList.add('open');
+  f.elements.company1.focus();
+}
+
+function closeAccountSettings() {
+  document.getElementById('acct-settings-overlay').classList.remove('open');
+  document.getElementById('acct-settings-modal').classList.remove('open');
+}
+
+async function saveAccountSettings() {
+  const f = document.getElementById('acct-settings-form');
+  const errEl = document.getElementById('acct-settings-error');
+  errEl.hidden = true;
+
+  const payload = {
+    company1:       f.elements.company1.value.trim(),
+    company2:       f.elements.company2.value.trim() || null,
+    company3:       f.elements.company3.value.trim() || null,
+    company4:       f.elements.company4.value.trim() || null,
+    bank_name:      f.elements.bank_name.value.trim(),
+    bank_info1:     f.elements.bank_info1.value.trim() || null,
+    bank_info2:     f.elements.bank_info2.value.trim() || null,
+    transit_code:   f.elements.transit_code.value.trim() || null,
+    routing_number: f.elements.routing_number.value.trim(),
+    account_number: f.elements.account_number.value.trim(),
+    offset_left:    parseFloat(f.elements.offset_left.value)  || 0,
+    offset_right:   parseFloat(f.elements.offset_right.value) || 0,
+    offset_up:      parseFloat(f.elements.offset_up.value)    || 0,
+    offset_down:    parseFloat(f.elements.offset_down.value)  || 0,
+    logo_data:      acctSettings.logoData || null,
+  };
+
+  if (!payload.company1) {
+    errEl.textContent = 'Organization name is required.';
+    errEl.hidden = false;
+    f.elements.company1.focus();
+    return;
+  }
+  if (!payload.routing_number || !payload.account_number) {
+    errEl.textContent = 'Routing number and account number are required.';
+    errEl.hidden = false;
+    return;
+  }
+
+  const btn = document.getElementById('btn-save-acct-settings');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    state.account = await apiFetch('PUT', `/api/account/${state.activeAccountId}`, payload);
+    // Refresh account in the accounts list (for the switcher label)
+    await loadAccounts();
+    renderHeader();
+    closeAccountSettings();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.hidden = false;
+    btn.disabled = false;
+    btn.textContent = 'Save Changes';
+  }
+}
+
 // ── Utilities ────────────────────────────────────────────────────────────────
 
 function escHtml(str) {
@@ -598,6 +693,25 @@ function init() {
   // Account switcher
   document.getElementById('account-switcher').addEventListener('change', e => {
     switchAccount(parseInt(e.target.value, 10));
+  });
+
+  // Account settings modal
+  document.getElementById('btn-account-settings').addEventListener('click', openAccountSettings);
+  document.getElementById('btn-close-acct-settings').addEventListener('click', closeAccountSettings);
+  document.getElementById('btn-cancel-acct-settings').addEventListener('click', closeAccountSettings);
+  document.getElementById('acct-settings-overlay').addEventListener('click', closeAccountSettings);
+  document.getElementById('btn-save-acct-settings').addEventListener('click', saveAccountSettings);
+  document.getElementById('as-logo').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) { acctSettings.logoData = null; return; }
+    const reader = new FileReader();
+    reader.onload = ev => {
+      acctSettings.logoData = ev.target.result;
+      const preview = document.getElementById('as-logo-preview');
+      preview.innerHTML = `<img src="${ev.target.result}" alt="Logo preview">`;
+      preview.hidden = false;
+    };
+    reader.readAsDataURL(file);
   });
 
   // Initial data load
