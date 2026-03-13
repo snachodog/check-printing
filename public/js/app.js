@@ -3,7 +3,10 @@
 const state = {
   checks: [],
   account: null,
-  filter: '0',        // '' = all, '0' = unprinted, '1' = printed
+  filterStatus: '',   // '' = all, '0' = unprinted, '1' = printed
+  filterPayee: '',
+  filterDateFrom: '',
+  filterDateTo: '',
   sortCol: 'check_no',
   sortDir: 'desc',
   selected: new Set(),
@@ -37,9 +40,7 @@ async function loadChecks() {
   const tbody = document.getElementById('checks-tbody');
   tbody.innerHTML = '<tr class="loading-row"><td colspan="8">Loading…</td></tr>';
   try {
-    const params = new URLSearchParams();
-    if (state.filter !== '') params.set('printed', state.filter);
-    state.checks = await apiFetch('GET', `/api/checks?${params}`);
+    state.checks = await apiFetch('GET', '/api/checks');
     state.selected.clear();
     renderTable();
     refreshPdfButton();
@@ -58,7 +59,7 @@ function renderHeader() {
 }
 
 function renderTable() {
-  const checks = sortedChecks();
+  const checks = filteredAndSortedChecks();
   const tbody = document.getElementById('checks-tbody');
 
   if (checks.length === 0) {
@@ -81,9 +82,6 @@ function renderTable() {
   tbody.querySelectorAll('.btn-delete').forEach(btn => {
     btn.addEventListener('click', () => deleteCheck(parseInt(btn.dataset.id, 10)));
   });
-  tbody.querySelectorAll('.btn-reprint').forEach(btn => {
-    btn.addEventListener('click', () => reprintCheck(parseInt(btn.dataset.id, 10)));
-  });
 }
 
 function renderRow(c) {
@@ -100,18 +98,14 @@ function renderRow(c) {
       })
     : '—';
 
-  const checkbox = printed
-    ? '<td class="col-select"></td>'
-    : `<td class="col-select"><input type="checkbox" data-id="${c.id}"${selected ? ' checked' : ''}></td>`;
+  const checkbox = `<td class="col-select"><input type="checkbox" data-id="${c.id}"${selected ? ' checked' : ''}></td>`;
 
   const statusBadge = printed
     ? '<span class="status-badge status-printed">Printed</span>'
     : '<span class="status-badge status-unprinted">Unprinted</span>';
 
-  const actions = printed
-    ? `<button class="btn-sm btn-reprint" data-id="${c.id}">Reprint</button>`
-    : `<button class="btn-sm btn-edit" data-id="${c.id}">Edit</button>` +
-      `<button class="btn-sm btn-delete" data-id="${c.id}">Delete</button>`;
+  const actions = `<button class="btn-sm btn-edit" data-id="${c.id}">Edit</button>` +
+                  `<button class="btn-sm btn-delete" data-id="${c.id}">Delete</button>`;
 
   return `<tr class="${printed ? 'printed' : ''}">
     ${checkbox}
@@ -125,10 +119,24 @@ function renderRow(c) {
   </tr>`;
 }
 
-function sortedChecks() {
+function filteredAndSortedChecks() {
+  const payee = state.filterPayee.toLowerCase();
+  const from  = state.filterDateFrom;
+  const to    = state.filterDateTo;
+  const status = state.filterStatus;
+
+  let list = state.checks.filter(c => {
+    if (payee  && !c.payee.toLowerCase().includes(payee)) return false;
+    if (from   && c.check_date < from) return false;
+    if (to     && c.check_date > to)   return false;
+    if (status === '0' &&  c.printed)  return false;
+    if (status === '1' && !c.printed)  return false;
+    return true;
+  });
+
   const col = state.sortCol;
   const dir = state.sortDir === 'asc' ? 1 : -1;
-  return [...state.checks].sort((a, b) => {
+  return list.sort((a, b) => {
     let av = a[col];
     let bv = b[col];
     if (col === 'amount') { av = parseFloat(av); bv = parseFloat(bv); }
@@ -318,26 +326,6 @@ async function generatePdf() {
   }
 }
 
-async function reprintCheck(id) {
-  const check = state.checks.find(c => c.id === id);
-  if (!check) return;
-  if (!confirm(`Reprint check #${check.check_no} to "${check.payee}"?\n(Will not re-mark as printed)`)) return;
-  try {
-    const res = await fetch('/api/pdf?mark_printed=false', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ checkIds: [id] }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.error || res.statusText);
-    }
-    const blob = await res.blob();
-    window.open(URL.createObjectURL(blob), '_blank');
-  } catch (err) {
-    alert(`Reprint error: ${err.message}`);
-  }
-}
 
 // ── Setup wizard ─────────────────────────────────────────────────────────────
 
@@ -530,10 +518,22 @@ function init() {
     });
   });
 
-  // Filter dropdown
+  // Filters (client-side; just re-render)
+  document.getElementById('filter-payee').addEventListener('input', e => {
+    state.filterPayee = e.target.value;
+    renderTable();
+  });
+  document.getElementById('filter-date-from').addEventListener('change', e => {
+    state.filterDateFrom = e.target.value;
+    renderTable();
+  });
+  document.getElementById('filter-date-to').addEventListener('change', e => {
+    state.filterDateTo = e.target.value;
+    renderTable();
+  });
   document.getElementById('filter-status').addEventListener('change', e => {
-    state.filter = e.target.value;
-    loadChecks();
+    state.filterStatus = e.target.value;
+    renderTable();
   });
 
   // New check

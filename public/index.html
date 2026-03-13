@@ -18,10 +18,13 @@
 
   <div class="toolbar">
     <div class="toolbar-left">
-      <label for="filter-status">Show:</label>
+      <input type="search" id="filter-payee" placeholder="Search payee…" style="width:160px">
+      <input type="date" id="filter-date-from" title="From date">
+      <span style="color:var(--text-muted)">–</span>
+      <input type="date" id="filter-date-to" title="To date">
       <select id="filter-status">
-        <option value="">All</option>
-        <option value="0" selected>Unprinted</option>
+        <option value="" selected>All</option>
+        <option value="0">Unprinted</option>
         <option value="1">Printed</option>
       </select>
     </div>
