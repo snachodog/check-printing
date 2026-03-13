@@ -26,6 +26,50 @@ app.get('/api/accounts', (req, res) => {
   res.json(accounts);
 });
 
+// PUT /api/account/:id - update account settings
+app.put('/api/account/:id', (req, res) => {
+  const db = require('./db/database');
+  const account = db.prepare('SELECT id FROM account WHERE id = ?').get(req.params.id);
+  if (!account) return res.status(404).json({ error: 'Account not found.' });
+
+  const {
+    company1, company2, company3, company4,
+    bank_name, bank_info1, bank_info2, bank_info3, transit_code,
+    routing_number, account_number,
+    offset_left, offset_right, offset_up, offset_down,
+    logo_data,
+  } = req.body;
+
+  if (!company1 || !routing_number || !account_number) {
+    return res.status(400).json({ error: 'Organization name, routing number, and account number are required.' });
+  }
+
+  db.prepare(`
+    UPDATE account SET
+      company1 = ?, company2 = ?, company3 = ?, company4 = ?,
+      bank_name = ?, bank_info1 = ?, bank_info2 = ?, bank_info3 = ?, transit_code = ?,
+      routing_number = ?, account_number = ?,
+      offset_left = ?, offset_right = ?, offset_up = ?, offset_down = ?,
+      logo_data = CASE WHEN ? IS NOT NULL THEN ? ELSE logo_data END,
+      updated_at = datetime('now')
+    WHERE id = ?
+  `).run(
+    company1 || null, company2 || null, company3 || null, company4 || null,
+    bank_name || '', bank_info1 || null, bank_info2 || null, bank_info3 || null, transit_code || null,
+    routing_number, account_number,
+    parseFloat(offset_left) || 0, parseFloat(offset_right) || 0,
+    parseFloat(offset_up) || 0, parseFloat(offset_down) || 0,
+    logo_data || null, logo_data || null,
+    req.params.id
+  );
+
+  res.json(db.prepare(
+    'SELECT id, bank_name, bank_info1, bank_info2, bank_info3, transit_code, ' +
+    'routing_number, account_number, current_check_no, ' +
+    'company1, company2, company3, company4, check_position FROM account WHERE id = ?'
+  ).get(req.params.id));
+});
+
 // GET /api/account/:id - get full account by id
 app.get('/api/account/:id', (req, res) => {
   const db = require('./db/database');

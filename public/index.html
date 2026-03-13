@@ -11,6 +11,7 @@
     <div class="header-left">
       <span class="header-brand" id="company-name">ezcheck</span>
       <select id="account-switcher" class="account-switcher" title="Switch account"></select>
+      <button id="btn-account-settings" class="btn-header-icon" title="Account settings">⚙</button>
     </div>
     <span class="header-info">Next check: <strong id="current-check-no">—</strong></span>
   </header>
@@ -235,6 +236,101 @@
     <div class="modal-footer">
       <button id="btn-run-import" class="btn-primary">Import</button>
       <button id="btn-cancel-import" class="btn-ghost">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Account settings modal -->
+  <div id="acct-settings-overlay" class="modal-overlay"></div>
+  <div id="acct-settings-modal" class="modal" role="dialog" aria-labelledby="acct-settings-title">
+    <div class="modal-header">
+      <h2 id="acct-settings-title">Account Settings</h2>
+      <button id="btn-close-acct-settings" class="btn-icon" title="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="acct-settings-form" novalidate>
+
+        <p class="settings-section-label">Organization</p>
+        <div class="form-group required">
+          <label for="as-company1">Name</label>
+          <input type="text" id="as-company1" name="company1">
+        </div>
+        <div class="form-group">
+          <label for="as-company2">Address</label>
+          <input type="text" id="as-company2" name="company2">
+        </div>
+        <div class="form-group">
+          <label for="as-company3">City / State / ZIP</label>
+          <input type="text" id="as-company3" name="company3">
+        </div>
+        <div class="form-group">
+          <label for="as-company4">Phone / Web / Email</label>
+          <input type="text" id="as-company4" name="company4">
+        </div>
+
+        <p class="settings-section-label">Bank</p>
+        <div class="form-group">
+          <label for="as-bank-name">Bank Name</label>
+          <input type="text" id="as-bank-name" name="bank_name">
+        </div>
+        <div class="form-group">
+          <label for="as-bank-info1">Bank Address</label>
+          <input type="text" id="as-bank-info1" name="bank_info1">
+        </div>
+        <div class="form-group">
+          <label for="as-bank-info2">Bank Phone / Web</label>
+          <input type="text" id="as-bank-info2" name="bank_info2">
+        </div>
+        <div class="form-group">
+          <label for="as-transit">Transit Code</label>
+          <input type="text" id="as-transit" name="transit_code">
+        </div>
+
+        <p class="settings-section-label">Account</p>
+        <div class="form-row">
+          <div class="form-group required">
+            <label for="as-routing">Routing Number</label>
+            <input type="text" id="as-routing" name="routing_number" inputmode="numeric" maxlength="9">
+          </div>
+          <div class="form-group required">
+            <label for="as-account">Account Number</label>
+            <input type="text" id="as-account" name="account_number" inputmode="numeric">
+          </div>
+        </div>
+
+        <p class="settings-section-label">Logo</p>
+        <div class="form-group">
+          <label for="as-logo">Upload new logo</label>
+          <input type="file" id="as-logo" accept="image/*">
+          <span class="field-hint">Replaces existing logo. PNG or GIF recommended.</span>
+        </div>
+        <div id="as-logo-preview" class="logo-preview" hidden></div>
+
+        <p class="settings-section-label">Printer Offset <span class="field-hint">(inches — adjust if checks print misaligned)</span></p>
+        <div class="form-row form-row-4">
+          <div class="form-group">
+            <label for="as-off-left">Left</label>
+            <input type="number" id="as-off-left" name="offset_left" step="0.01" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label for="as-off-right">Right</label>
+            <input type="number" id="as-off-right" name="offset_right" step="0.01" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label for="as-off-up">Up</label>
+            <input type="number" id="as-off-up" name="offset_up" step="0.01" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label for="as-off-down">Down</label>
+            <input type="number" id="as-off-down" name="offset_down" step="0.01" placeholder="0">
+          </div>
+        </div>
+
+        <div id="acct-settings-error" class="wizard-error" hidden></div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button id="btn-save-acct-settings" class="btn-primary">Save Changes</button>
+      <button id="btn-cancel-acct-settings" class="btn-ghost">Cancel</button>
     </div>
   </div>
 
