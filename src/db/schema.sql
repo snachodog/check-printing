@@ -71,5 +71,3 @@ CREATE TABLE IF NOT EXISTS layout_fields (
 CREATE INDEX IF NOT EXISTS idx_checks_date      ON checks(check_date);
 CREATE INDEX IF NOT EXISTS idx_checks_printed   ON checks(printed);
 CREATE INDEX IF NOT EXISTS idx_checks_check_no  ON checks(check_no);
-CREATE INDEX IF NOT EXISTS idx_checks_account   ON checks(account_id);
-CREATE INDEX IF NOT EXISTS idx_layout_account   ON layout_fields(account_id);
