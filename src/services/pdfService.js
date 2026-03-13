@@ -88,7 +88,7 @@ function formatMicrLine(routingNo, accountNo, checkNo) {
 }
 
 /**
- * Main export: generates a PDF buffer for 1–3 checks.
+ * Main export: generates a multi-page PDF buffer for any number of checks (3 per page).
  *
  * @param {Object} account - Account row from database
  * @param {Array}  checks  - Array of 1–3 check rows from database
@@ -128,14 +128,17 @@ function generateCheckPdf(account, checks, fields) {
     const hasUsableLogo = !!(logoField && account.logo_data);
     const COMPANY_FIELDS = new Set(['Company Name', 'Company Name2', 'Company Name3', 'Company Name4']);
 
-    // We always render 3 slots; empty slots get a blank placeholder
-    for (let slot = 0; slot < 3; slot++) {
-      const check = checks[slot] || null;
-      const slotOriginY = slot * SLOT_HEIGHT_IN;
+    const offX = (account.offset_right - account.offset_left);
+    const offY = (account.offset_down - account.offset_up);
 
-      // Offset adjustments from account calibration
-      const offX = (account.offset_right - account.offset_left);
-      const offY = (account.offset_down - account.offset_up);
+    // Render checks in pages of 3; add a new page for each additional group
+    const pages = Math.ceil(checks.length / 3);
+    for (let page = 0; page < pages; page++) {
+      if (page > 0) doc.addPage();
+
+      for (let slot = 0; slot < 3; slot++) {
+      const check = checks[page * 3 + slot] || null;
+      const slotOriginY = slot * SLOT_HEIGHT_IN;
 
       // Helper: convert inches (relative to slot) to PDF points (absolute page)
       const pt = (xIn, yIn) => ({
@@ -220,7 +223,8 @@ function generateCheckPdf(account, checks, fields) {
            .text(micrLine, micrPos.x, micrPos.y, { lineBreak: false });
       }
 
-    }
+      } // end slot loop
+    } // end page loop
 
     doc.end();
   });
