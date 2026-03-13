@@ -3,6 +3,8 @@
 const state = {
   checks: [],
   account: null,
+  accounts: [],
+  activeAccountId: parseInt(localStorage.getItem('activeAccountId'), 10) || null,
   filterStatus: '',   // '' = all, '0' = unprinted, '1' = printed
   filterPayee: '',
   filterDateFrom: '',
@@ -27,20 +29,50 @@ async function apiFetch(method, path, body) {
 
 // ── Data loading ─────────────────────────────────────────────────────────────
 
-async function loadAccount() {
+async function loadAccounts() {
   try {
-    state.account = await apiFetch('GET', '/api/account');
+    state.accounts = await apiFetch('GET', '/api/accounts');
+    if (state.accounts.length === 0) {
+      openWizard();
+      return;
+    }
+    // Use stored account or default to first
+    const stored = state.activeAccountId;
+    const valid = stored && state.accounts.find(a => a.id === stored);
+    state.activeAccountId = valid ? stored : state.accounts[0].id;
+    localStorage.setItem('activeAccountId', state.activeAccountId);
+
+    populateAccountSwitcher();
+    state.account = await apiFetch('GET', `/api/account/${state.activeAccountId}`);
     renderHeader();
+    await loadChecks();
   } catch (err) {
-    if (err.message && err.message.includes('No account')) openWizard();
+    console.error('Failed to load accounts:', err);
   }
 }
 
+function populateAccountSwitcher() {
+  const sel = document.getElementById('account-switcher');
+  sel.innerHTML = state.accounts.map(a =>
+    `<option value="${a.id}"${a.id === state.activeAccountId ? ' selected' : ''}>${escHtml(a.company1 || a.bank_name || `Account ${a.id}`)}</option>`
+  ).join('');
+}
+
+async function switchAccount(accountId) {
+  state.activeAccountId = accountId;
+  localStorage.setItem('activeAccountId', accountId);
+  state.selected.clear();
+  state.account = await apiFetch('GET', `/api/account/${accountId}`);
+  renderHeader();
+  await loadChecks();
+}
+
 async function loadChecks() {
+  if (!state.activeAccountId) return;
   const tbody = document.getElementById('checks-tbody');
   tbody.innerHTML = '<tr class="loading-row"><td colspan="8">Loading…</td></tr>';
   try {
-    state.checks = await apiFetch('GET', '/api/checks');
+    state.checks = await apiFetch('GET', `/api/checks?account_id=${state.activeAccountId}`);
     state.selected.clear();
     renderTable();
     refreshPdfButton();
@@ -258,10 +290,10 @@ async function saveCheck(e) {
     if (state.editingId !== null) {
       await apiFetch('PUT', `/api/checks/${state.editingId}`, data);
     } else {
-      await apiFetch('POST', '/api/checks', data);
+      await apiFetch('POST', '/api/checks', { ...data, account_id: state.activeAccountId });
     }
     closePanel();
-    await Promise.all([loadAccount(), loadChecks()]);
+    await Promise.all([loadAccounts(), loadChecks()]);
   } catch (err) {
     alert(`Error: ${err.message}`);
   } finally {
@@ -296,7 +328,7 @@ async function generatePdf() {
     const res = await fetch('/api/pdf', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ checkIds: ids }),
+      body: JSON.stringify({ checkIds: ids, account_id: state.activeAccountId }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }));
@@ -407,9 +439,10 @@ async function finishWizard() {
   btn.textContent = 'Saving…';
 
   try {
-    await apiFetch('POST', '/api/account/setup', payload);
+    const result = await apiFetch('POST', '/api/account/setup', payload);
     closeWizard();
-    await Promise.all([loadAccount(), loadChecks()]);
+    await loadAccounts();
+    if (result.accountId) await switchAccount(result.accountId);
   } catch (err) {
     const errEl = document.getElementById('wizard-error');
     errEl.textContent = err.message;
@@ -464,7 +497,8 @@ async function runImport() {
     if (res.ok) {
       log.classList.add('success');
       btn.textContent = 'Done';
-      await Promise.all([loadAccount(), loadChecks()]);
+      await loadAccounts();
+      if (data.newAccountId) await switchAccount(data.newAccountId);
     } else {
       log.classList.add('error');
       btn.disabled = false;
@@ -561,9 +595,13 @@ function init() {
   document.getElementById('import-modal-overlay').addEventListener('click', closeImportModal);
   document.getElementById('btn-run-import').addEventListener('click', runImport);
 
+  // Account switcher
+  document.getElementById('account-switcher').addEventListener('change', e => {
+    switchAccount(parseInt(e.target.value, 10));
+  });
+
   // Initial data load
-  loadAccount();
-  loadChecks();
+  loadAccounts();
 }
 
 document.addEventListener('DOMContentLoaded', init);

@@ -4,16 +4,13 @@
 /**
  * import-mdb.js
  *
- * One-time migration: reads a single ezCheckPrinting .mdb file and imports
- * account config, check layout, and check records into the SQLite database.
- *
- * Prerequisites:
- *   - mdbtools installed: `sudo apt install mdbtools` or brew install mdbtools
- *   - SQLite DB initialized (runs automatically on first require of database.js)
+ * Migration: reads an ezCheckPrinting .mdb file and imports account config,
+ * check layout, and check records into the SQLite database as a NEW account.
+ * Each import creates a separate account row; existing accounts are unaffected.
  *
  * Usage:
- *   node migrations/import-mdb.js --file "/path/to/Montana Dinosaur Center.mdb"
- *   node migrations/import-mdb.js --file "/path/to/Montana Dinosaur Center.mdb" --dry-run
+ *   node migrations/import-mdb.js --file "/path/to/Account.mdb"
+ *   node migrations/import-mdb.js --file "/path/to/Account.mdb" --dry-run
  */
 
 const { execSync } = require('child_process');
@@ -51,17 +48,11 @@ function mdbExport(table) {
   }
 }
 
-/**
- * Minimal CSV parser. Handles quoted fields with embedded commas and newlines.
- * Not a full RFC 4180 implementation but sufficient for mdb-export output.
- */
 function parseCsv(text) {
   const lines = text.trim().split('\n');
   if (lines.length < 2) return [];
-
   const headers = splitCsvLine(lines[0]);
   const rows = [];
-
   for (let i = 1; i < lines.length; i++) {
     const values = splitCsvLine(lines[i]);
     if (values.length === 0) continue;
@@ -78,16 +69,11 @@ function splitCsvLine(line) {
   const result = [];
   let current = '';
   let inQuotes = false;
-
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
     } else if (ch === ',' && !inQuotes) {
       result.push(current);
       current = '';
@@ -100,8 +86,7 @@ function splitCsvLine(line) {
 }
 
 // ---- Font name normalization -------------------------------------------------
-// .mdb stores Windows font names; map common ones to PDFKit built-ins.
-// Any unmapped font will fall back to Helvetica at render time.
+
 const FONT_MAP = {
   'Times New Roman': 'Times-Roman',
   'Helsinki': 'Helvetica',
@@ -119,27 +104,21 @@ function normalizeFont(fontName, isBold) {
   return mapped;
 }
 
-// TODO: Support multi-account .mdb import -- run migration per account and associate records with account_id
-
 // ---- Import: T100 (account config) ------------------------------------------
 
 function importAccount() {
   console.log('\n--- Importing account config (T100) ---');
   const rows = mdbExport('T100');
-
   if (rows.length === 0) {
     console.error('No rows in T100. Is this a valid ezCheckPrinting .mdb?');
     process.exit(1);
   }
 
-  // Take the first (and typically only) row
   const r = rows[0];
   console.log(`Account: ${r.Company1} / Bank: ${r.BankName}`);
   console.log(`Routing: ${r.BankRouteNo} | Account: ${r.BankAccountNo}`);
   console.log(`Current check no: ${r.CurrentCheckNo}`);
 
-  // Logo is stored as base64 in the Settings table (not T100)
-  // We fetch it separately below and update after insert.
   const accountData = {
     bank_name:        r.BankName?.trim() || '',
     bank_info1:       r.BankInfo1?.trim() || null,
@@ -165,9 +144,7 @@ function importAccount() {
   };
 
   if (!dryRun) {
-    // Delete existing account row (single-account Phase 1 assumption)
-    db.prepare('DELETE FROM account').run();
-    db.prepare(`
+    const result = db.prepare(`
       INSERT INTO account (
         bank_name, bank_info1, bank_info2, bank_info3, transit_code,
         routing_number, account_number, start_check_no, current_check_no,
@@ -182,17 +159,18 @@ function importAccount() {
         @blank_stock, @check_position
       )
     `).run(accountData);
-    console.log('Account config imported.');
+    const accountId = result.lastInsertRowid;
+    console.log(`Account config imported (id=${accountId}).`);
+    return accountId;
   } else {
     console.log('[dry-run] Would insert:', JSON.stringify(accountData, null, 2));
+    return null;
   }
-
-  return accountData;
 }
 
 // ---- Import: Settings (logo image) ------------------------------------------
 
-function importLogo() {
+function importLogo(accountId) {
   console.log('\n--- Importing logo from Settings table ---');
   const rows = mdbExport('Settings');
   const logoRow = rows.find(r => r.SettingKey === 'LogoImg');
@@ -202,12 +180,11 @@ function importLogo() {
     return;
   }
 
-  // Value is raw base64 (GIF format based on the data we saw)
   const base64Data = logoRow.SettingValue.trim();
   const dataUri = `data:image/gif;base64,${base64Data}`;
 
   if (!dryRun) {
-    db.prepare('UPDATE account SET logo_data = ? WHERE id = 1').run(dataUri);
+    db.prepare('UPDATE account SET logo_data = ? WHERE id = ?').run(dataUri, accountId);
     console.log(`Logo imported (${Math.round(base64Data.length / 1024)} KB base64).`);
   } else {
     console.log(`[dry-run] Would import logo (${Math.round(base64Data.length / 1024)} KB base64).`);
@@ -216,22 +193,22 @@ function importLogo() {
 
 // ---- Import: T200 (check layout fields) -------------------------------------
 
-function importLayoutFields() {
+function importLayoutFields(accountId) {
   console.log('\n--- Importing check layout fields (T200) ---');
   const rows = mdbExport('T200');
   console.log(`Found ${rows.length} layout fields.`);
 
   if (!dryRun) {
-    db.prepare('DELETE FROM layout_fields').run();
+    db.prepare('DELETE FROM layout_fields WHERE account_id = ?').run(accountId);
   }
 
   const insert = db.prepare(`
     INSERT INTO layout_fields (
-      field_name, field_text, font_name, font_size, font_bold,
+      account_id, field_name, field_text, font_name, font_size, font_bold,
       field_type, line_thick, x_pos, y_pos, x_end_pos, y_end_pos,
       visible, not_for_preprint
     ) VALUES (
-      @field_name, @field_text, @font_name, @font_size, @font_bold,
+      @account_id, @field_name, @field_text, @font_name, @font_size, @font_bold,
       @field_type, @line_thick, @x_pos, @y_pos, @x_end_pos, @y_end_pos,
       @visible, @not_for_preprint
     )
@@ -241,6 +218,7 @@ function importLayoutFields() {
   for (const r of rows) {
     const isBold = r.FldFontType === '1';
     const fieldData = {
+      account_id:       accountId,
       field_name:       r.FldName?.trim() || '',
       field_text:       r.FldText?.trim() || null,
       font_name:        normalizeFont(r.FldFontName?.trim(), isBold),
@@ -269,7 +247,7 @@ function importLayoutFields() {
 
 // ---- Import: T104 (check records) -------------------------------------------
 
-function importChecks() {
+function importChecks(accountId) {
   console.log('\n--- Importing check records (T104) ---');
   const rows = mdbExport('T104');
   console.log(`Found ${rows.length} check records.`);
@@ -280,16 +258,16 @@ function importChecks() {
   }
 
   if (!dryRun) {
-    db.prepare('DELETE FROM checks').run();
+    db.prepare('DELETE FROM checks WHERE account_id = ?').run(accountId);
   }
 
   const insert = db.prepare(`
     INSERT INTO checks (
-      check_no, payee, amount, check_date, memo, note1, note2,
+      account_id, check_no, payee, amount, check_date, memo, note1, note2,
       payee_address1, payee_address2, payee_address3, payee_address4,
       printed, add_date, mdb_check_id
     ) VALUES (
-      @check_no, @payee, @amount, @check_date, @memo, @note1, @note2,
+      @account_id, @check_no, @payee, @amount, @check_date, @memo, @note1, @note2,
       @payee_address1, @payee_address2, @payee_address3, @payee_address4,
       @printed, @add_date, @mdb_check_id
     )
@@ -298,13 +276,12 @@ function importChecks() {
   let count = 0;
   let skipped = 0;
   for (const r of rows) {
-    // Normalize date: .mdb uses MM/DD/YYYY or similar; convert to YYYY-MM-DD
     const rawDate = r.CheckDate?.trim() || '';
     const checkDate = normalizeDate(rawDate);
-
     const addDate = normalizeDate(r.AddDate?.trim() || '') || new Date().toISOString();
 
     const checkData = {
+      account_id:     accountId,
       check_no:       parseInt(r.CheckNo),
       payee:          r.Payee?.trim() || '',
       amount:         parseFloat(r.Amount) || 0,
@@ -348,7 +325,6 @@ function importChecks() {
 
 function normalizeDate(raw) {
   if (!raw) return null;
-  // mdb-export outputs dates as "MM/DD/YYYY HH:MM:SS", "MM/DD/YY", or "YYYY-MM-DD"
   const mdyMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
   if (mdyMatch) {
     const [, m, d, y] = mdyMatch;
@@ -368,10 +344,16 @@ console.log(`\nImporting from: ${mdbFile}`);
 console.log(`Target database: ${process.env.DB_PATH || 'data/ezcheck.db'}`);
 
 try {
-  importAccount();
-  importLogo();
-  importLayoutFields();
-  importChecks();
+  const accountId = importAccount();
+  if (!dryRun && accountId) {
+    importLogo(accountId);
+    importLayoutFields(accountId);
+    importChecks(accountId);
+  } else if (dryRun) {
+    importLogo(null);
+    importLayoutFields(null);
+    importChecks(null);
+  }
   console.log('\nMigration complete.');
 } catch (err) {
   console.error('\nMigration failed:', err);

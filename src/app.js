@@ -17,33 +17,30 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.use('/api/checks', require('./routes/checks'));
 app.use('/api/pdf',    require('./routes/pdf'));
 
-// .mdb import endpoint
-app.post('/api/import', upload.single('mdbfile'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
-  const tmpPath = req.file.path;
-  try {
-    const output = execFileSync(
-      process.execPath,
-      [path.join(__dirname, '../migrations/import-mdb.js'), '--file', tmpPath],
-      { encoding: 'utf8', timeout: 120000, env: process.env }
-    );
-    res.json({ success: true, log: output });
-  } catch (err) {
-    res.status(500).json({
-      error: 'Import failed.',
-      log: [err.stdout, err.stderr, err.message].filter(Boolean).join('\n'),
-    });
-  } finally {
-    fs.unlink(tmpPath, () => {});
-  }
+// GET /api/accounts - list all accounts (id + display name)
+app.get('/api/accounts', (req, res) => {
+  const db = require('./db/database');
+  const accounts = db.prepare(
+    'SELECT id, company1, bank_name, current_check_no FROM account ORDER BY id ASC'
+  ).all();
+  res.json(accounts);
 });
 
-// Account setup endpoint (first-run wizard)
+// GET /api/account/:id - get full account by id
+app.get('/api/account/:id', (req, res) => {
+  const db = require('./db/database');
+  const account = db.prepare(
+    'SELECT id, bank_name, bank_info1, bank_info2, bank_info3, transit_code, ' +
+    'routing_number, account_number, current_check_no, ' +
+    'company1, company2, company3, company4, check_position FROM account WHERE id = ?'
+  ).get(req.params.id);
+  if (!account) return res.status(404).json({ error: 'Account not found.' });
+  res.json(account);
+});
+
+// POST /api/account/setup - create a new account (wizard)
 app.post('/api/account/setup', (req, res) => {
   const db = require('./db/database');
-  const existing = db.prepare('SELECT id FROM account WHERE id = 1').get();
-  if (existing) return res.status(409).json({ error: 'Account already configured.' });
-
   const {
     company1, company2, company3, company4,
     bank_name, bank_info1, bank_info2, transit_code,
@@ -58,7 +55,7 @@ app.post('/api/account/setup', (req, res) => {
     return res.status(400).json({ error: 'Starting check number must be a positive integer.' });
   }
 
-  db.prepare(`
+  const result = db.prepare(`
     INSERT INTO account (
       bank_name, bank_info1, bank_info2, transit_code,
       routing_number, account_number, start_check_no, current_check_no,
@@ -84,29 +81,35 @@ app.post('/api/account/setup', (req, res) => {
     logo_data:        logo_data || null,
   });
 
-  res.status(201).json({ success: true });
+  res.status(201).json({ success: true, accountId: result.lastInsertRowid });
 });
-
-// TODO: Add multi-account support -- account switcher, per-account routing/logo/layout, account_id FK on checks and layout_fields
 
 // TODO: Add basic auth or simple password gate for any network-exposed deployment
 
 // TODO: Add deposit slip support -- deposits table, PDF generation, ledger, and slide-in entry form
 
-// Account info endpoint (read-only for Phase 1)
-app.get('/api/account', (req, res) => {
+// .mdb import endpoint — always creates a new account
+app.post('/api/import', upload.single('mdbfile'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
   const db = require('./db/database');
-  const account = db.prepare(
-    'SELECT id, bank_name, bank_info1, bank_info2, bank_info3, transit_code, ' +
-    'routing_number, account_number, current_check_no, ' +
-    'company1, company2, company3, company4, check_position FROM account WHERE id = 1'
-  ).get();
-  if (!account) {
-    return res.status(404).json({ error: 'No account configured. Run migration first.' });
+  const tmpPath = req.file.path;
+  try {
+    const output = execFileSync(
+      process.execPath,
+      [path.join(__dirname, '../migrations/import-mdb.js'), '--file', tmpPath],
+      { encoding: 'utf8', timeout: 120000, env: process.env }
+    );
+    // Grab the newly created account (highest id)
+    const newAccount = db.prepare('SELECT id, company1 FROM account ORDER BY id DESC LIMIT 1').get();
+    res.json({ success: true, log: output, newAccountId: newAccount ? newAccount.id : null });
+  } catch (err) {
+    res.status(500).json({
+      error: 'Import failed.',
+      log: [err.stdout, err.stderr, err.message].filter(Boolean).join('\n'),
+    });
+  } finally {
+    fs.unlink(tmpPath, () => {});
   }
-  // Never send routing/account numbers in cleartext to the browser in production.
-  // For local-only Phase 1 this is acceptable; redact for any network-exposed deployment.
-  res.json(account);
 });
 
 // Catch-all: serve index.html for client-side routing

@@ -6,29 +6,25 @@ const db = require('../db/database');
 
 // TODO: Add ledger reporting -- date range filter, payee search, total amount display, CSV export
 
-// GET /api/checks - list all checks, newest first
+// GET /api/checks?account_id=X - list checks for an account, newest first
 router.get('/', (req, res) => {
-  const { after, printed } = req.query;
-  let query = 'SELECT * FROM checks';
-  const params = [];
-  const conditions = [];
+  const { after, printed, account_id } = req.query;
+  if (!account_id) return res.status(400).json({ error: 'account_id query param required' });
+
+  let query = 'SELECT * FROM checks WHERE account_id = ?';
+  const params = [account_id];
 
   if (after) {
-    conditions.push('check_date >= ?');
+    query += ' AND check_date >= ?';
     params.push(after);
   }
   if (printed !== undefined) {
-    conditions.push('printed = ?');
+    query += ' AND printed = ?';
     params.push(printed === 'true' || printed === '1' ? 1 : 0);
   }
 
-  if (conditions.length) {
-    query += ' WHERE ' + conditions.join(' AND ');
-  }
   query += ' ORDER BY check_no DESC';
-
-  const checks = db.prepare(query).all(...params);
-  res.json(checks);
+  res.json(db.prepare(query).all(...params));
 });
 
 // GET /api/checks/:id
@@ -42,43 +38,41 @@ router.get('/:id', (req, res) => {
 
 // POST /api/checks - create a new check
 router.post('/', (req, res) => {
-  const { payee, amount, check_date, memo, note1, note2,
+  const { account_id, payee, amount, check_date, memo, note1, note2,
           payee_address1, payee_address2, payee_address3, payee_address4 } = req.body;
 
-  if (!payee || !amount || !check_date) {
-    return res.status(400).json({ error: 'payee, amount, and check_date are required' });
+  if (!account_id || !payee || !amount || !check_date) {
+    return res.status(400).json({ error: 'account_id, payee, amount, and check_date are required' });
   }
 
-  // Get next check number from account
-  const account = db.prepare('SELECT current_check_no FROM account WHERE id = 1').get();
-  if (!account) return res.status(500).json({ error: 'No account configured. Run migration first.' });
+  const account = db.prepare('SELECT current_check_no FROM account WHERE id = ?').get(account_id);
+  if (!account) return res.status(400).json({ error: 'Account not found.' });
 
   const checkNo = account.current_check_no + 1;
 
   const insertCheck = db.prepare(`
-    INSERT INTO checks (check_no, payee, amount, check_date, memo, note1, note2,
+    INSERT INTO checks (account_id, check_no, payee, amount, check_date, memo, note1, note2,
       payee_address1, payee_address2, payee_address3, payee_address4)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const updateAccountCheckNo = db.prepare(
-    'UPDATE account SET current_check_no = ?, updated_at = datetime(\'now\') WHERE id = 1'
+    "UPDATE account SET current_check_no = ?, updated_at = datetime('now') WHERE id = ?"
   );
 
   const transaction = db.transaction(() => {
     const result = insertCheck.run(
-      checkNo, payee, parseFloat(amount), check_date,
+      account_id, checkNo, payee, parseFloat(amount), check_date,
       memo || null, note1 || null, note2 || null,
       payee_address1 || null, payee_address2 || null,
       payee_address3 || null, payee_address4 || null
     );
-    updateAccountCheckNo.run(checkNo);
+    updateAccountCheckNo.run(checkNo, account_id);
     return result.lastInsertRowid;
   });
 
   const newId = transaction();
-  const newCheck = db.prepare('SELECT * FROM checks WHERE id = ?').get(newId);
-  res.status(201).json(newCheck);
+  res.status(201).json(db.prepare('SELECT * FROM checks WHERE id = ?').get(newId));
 });
 
 // PUT /api/checks/:id - update a check
@@ -115,18 +109,16 @@ router.put('/:id', (req, res) => {
 router.delete('/:id', (req, res) => {
   const check = db.prepare('SELECT * FROM checks WHERE id = ?').get(req.params.id);
   if (!check) return res.status(404).json({ error: 'Check not found' });
-
   db.prepare('DELETE FROM checks WHERE id = ?').run(req.params.id);
   res.status(204).send();
 });
 
-// POST /api/checks/mark-printed - mark checks as printed
+// POST /api/checks/mark-printed
 router.post('/mark-printed', (req, res) => {
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
     return res.status(400).json({ error: 'ids array required' });
   }
-
   const placeholders = ids.map(() => '?').join(',');
   db.prepare(`UPDATE checks SET printed = 1 WHERE id IN (${placeholders})`).run(...ids);
   res.json({ updated: ids.length });
