@@ -86,10 +86,6 @@ router.put('/:id', (req, res) => {
   const check = db.prepare('SELECT * FROM checks WHERE id = ?').get(req.params.id);
   if (!check) return res.status(404).json({ error: 'Check not found' });
 
-  if (check.printed) {
-    return res.status(409).json({ error: 'Cannot edit a check that has been printed.' });
-  }
-
   const { payee, amount, check_date, memo, note1, note2,
           payee_address1, payee_address2, payee_address3, payee_address4 } = req.body;
 
@@ -119,10 +115,6 @@ router.put('/:id', (req, res) => {
 router.delete('/:id', (req, res) => {
   const check = db.prepare('SELECT * FROM checks WHERE id = ?').get(req.params.id);
   if (!check) return res.status(404).json({ error: 'Check not found' });
-
-  if (check.printed) {
-    return res.status(409).json({ error: 'Cannot delete a check that has been printed.' });
-  }
 
   db.prepare('DELETE FROM checks WHERE id = ?').run(req.params.id);
   res.status(204).send();
