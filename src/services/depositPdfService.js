@@ -5,13 +5,16 @@
  *
  * Generates two PDF types for a deposit:
  *   - Deposit Report: plain formatted document (Courier, monospaced)
- *   - Deposit Slip:   precisely positioned 3.375" × 8.5" slip with Style A background,
- *                     digit-column amounts, and a GnuMICR line rotated 90°.
+ *   - Deposit Slip:   precisely positioned 3.375" × 8.5" slip printed on an 8.5"×11"
+ *                     letter page for trimming. Style A background (grid lines drawn
+ *                     server-side). Digit-column amounts. GnuMICR line in left strip.
  *
  * All measurements in inches; converted to points (× 72) for PDFKit.
  *
- * TMDC slip layout is hardcoded. Tune the LAYOUT constants below if fields
- * print slightly off on physical stock.
+ * Left strip elements use rotate(90) so text reads when tilting head LEFT (same
+ * orientation as Qslip/standard bank deposit slips).
+ *
+ * Tune the SL constants below if fields print slightly off on physical stock.
  */
 
 const PDFDocument = require('pdfkit');
@@ -22,78 +25,71 @@ const PT = 72; // points per inch
 const MICR_FONT_PATH = path.join(__dirname, '../../fonts/GnuMICR.ttf');
 
 // ── Deposit Slip Layout Constants (inches) ────────────────────────────────────
-// Page is 3.375" wide × 8.5" tall (portrait).
-// A 0.625" strip on the LEFT holds all rotated elements (MICR, deposit total,
-// check count). The remaining 2.75" is the main form content.
+// Slip is 3.375" wide × 8.5" tall, printed on an 8.5"×11" letter page.
+// slipX offsets the slip horizontally on the letter page (0 = left edge).
+// A 0.625" strip on the LEFT holds all rotated strip elements.
+// Strip elements use rotate(90): text reads when tilting head LEFT (Qslip orientation).
+// Strip element Y positions are the TOP of each element; text flows downward.
 const SL = {
   W: 3.375,
   H: 8.5,
 
-  // Left rotated strip — right edge of reserved area
+  // Horizontal offset of the slip on the 8.5"×11" letter page
+  slipX: 0,
+
+  // Left rotated strip — width of reserved area
   stripX: 0.625,
 
-  // Content X start (inside the strip)
+  // Content X start (right of strip)
   cX: 0.65,
 
-  // ── Depositor / Bank block ────────────────────────────────────────────────
-  depositorY:  0.28,   // Y of first depositor line
-  bankX:       1.9,    // X of bank name (right column)
+  // ── Depositor block ───────────────────────────────────────────────────────
+  depositorY: 0.28,   // Y of company name (first depositor line)
 
   // ── Date ─────────────────────────────────────────────────────────────────
-  dateY:       1.38,   // Y of DATE label
-  dateValueX:  0.92,   // X where date value prints
+  dateY:      1.38,   // Y of DATE label
+  dateValueX: 0.92,   // X where date value prints
 
   // ── Disclaimer ────────────────────────────────────────────────────────────
   disclaimerY: 1.56,
 
   // ── Amount grid ───────────────────────────────────────────────────────────
-  gridTop:     1.72,   // top border of grid
-  rowH:        0.175,  // height of each row
+  gridTop:  1.72,   // top border of grid
+  rowH:     0.175,  // height of each row
 
-  // Column positions (right edges, in inches from left of page)
-  colCentsR:   3.26,   // right edge of cents column
-  colCentsW:   0.42,   // width of cents column
-  colDollarSep: 0.08,  // gap between dollars and cents columns
-  // dollars column right edge = colCentsR - colCentsW - colDollarSep
-  // dollars column width = 7 digit slots × digitW
+  // Column positions (right edges, in inches from left of slip)
+  colCentsR:    3.26,   // right edge of cents column
+  colCentsW:    0.42,   // width of cents column
+  colDollarSep: 0.08,   // gap between dollars and cents columns
 
-  digitW:      0.115,  // width of each digit slot (Courier 8pt ≈ 4.8pt + spacing)
-  centDigitW:  0.115,
+  digitW:     0.115,  // width per dollar digit slot
+  centDigitW: 0.115,
 
-  // Row Y offsets from gridTop (label baseline)
-  currencyRow: 1,      // grid row index
-  coinRow:     2,
-  checksRow:   3,      // "CHECKS:" label row (no amount on this row)
-  firstCheckRow: 4,    // first numbered check row
-  maxChecks:   30,
+  // Row indices
+  currencyRow:   1,
+  coinRow:       2,
+  checksRow:     3,  // "CHECKS:" label row — no amount
+  firstCheckRow: 4,
+  maxChecks:     30,
 
-  // Check number column X
-  checkNoX:    0.67,
-  checkNoW:    0.55,   // max width for check number text
+  checkNoX: 0.67,
+  checkNoW: 0.55,
 
-  // ── Footer ────────────────────────────────────────────────────────────────
-  // "TOTAL $" row sits just below the last check row
-  // (computed dynamically from firstCheckRow + maxChecks)
+  // ── Rotated left strip (rotate(90): text flows downward, reads tilt-left) ─
+  // All strip X positions are centered in the 0.625" strip.
+  // Y positions are the TOP anchor; text flows DOWNWARD from there.
+  stripCenterX:     0.32,   // ≈ stripX/2; tune to center text in strip width
 
-  // ── Rotated left strip ────────────────────────────────────────────────────
-  // Rotated text is drawn with doc.rotate(-90) centred in the strip.
-  // X positions below are distance from LEFT edge of page (strip area).
-  micrY:         8.3,   // Y (on page) where rotated MICR baseline sits
-  micrX:         0.12,  // X anchor for rotated MICR (left side of text after rotation)
+  micrY:            6.0,    // MICR starts here, flows ~2.4" to bottom
+  depTotalLabelY:   2.2,    // "DEPOSIT TOTAL $" label start
+  depTotalAmtY:     3.3,    // deposit total digits start (each 0.16" apart downward)
+  checkCountLabelY: 4.8,    // "TOTAL ITEMS" label start
+  checkCountValY:   5.7,    // check count value start
 
-  depTotalLabelY: 6.8,  // Y where "DEPOSIT TOTAL $" rotated label baseline sits
-  depTotalAmtY:   5.6,  // Y where deposit total digits start (reading upward)
-  depTotalX:      0.44, // X of rotated deposit total elements
-
-  checkCountLabelY: 3.5, // Y of rotated "TOTAL ITEMS" label
-  checkCountValY:   2.8, // Y of rotated check count value
-  checkCountX:      0.44,
-
-  // ── Style A background colours ───────────────────────────────────────────
-  bgStripColor:  '#d4c9a8',  // beige shaded strip (left margin)
-  bgLineColor:   '#888888',  // grid lines
-  bgLabelColor:  '#444444',  // row labels (CURRENCY, COIN, etc.)
-  bgHeaderColor: '#000000',  // DEPOSIT TICKET header
+  // ── Colours ───────────────────────────────────────────────────────────────
+  bgLineColor:   '#888888',
+  bgLabelColor:  '#444444',
+  bgHeaderColor: '#000000',
 };
 
 // Grid row Y baseline (from top of page, in inches)
@@ -220,8 +216,9 @@ function generateDepositSlip(account, deposit, items) {
   return new Promise((resolve, reject) => {
     const hasMicrFont = fs.existsSync(MICR_FONT_PATH);
 
+    // Letter page — slip sits at (slipX, 0); remaining space is blank for trimming
     const doc = new PDFDocument({
-      size: [SL.W * PT, SL.H * PT],
+      size: 'LETTER',
       margins: { top: 0, bottom: 0, left: 0, right: 0 },
       autoFirstPage: true,
     });
@@ -239,32 +236,37 @@ function generateDepositSlip(account, deposit, items) {
     const depositTotal = subTotal - (deposit.cash_back || 0);
     const checkCount   = items.length;
 
-    const totalRows    = SL.firstCheckRow + SL.maxChecks;  // last row index
-    const totalRowY_   = rowTopY(totalRows);                // top of TOTAL $ row
-    const gridBottom   = totalRowY_ + SL.rowH;
+    const totalRows  = SL.firstCheckRow + SL.maxChecks;
+    const totalRowY_ = rowTopY(totalRows);
+    const gridBottom = totalRowY_ + SL.rowH;
+
+    // Offset all slip drawing to its position on the letter page
+    doc.save();
+    doc.translate(SL.slipX * PT, 0);
 
     // ── Style A background ──────────────────────────────────────────────────
 
-    // Left beige strip
-    doc.rect(0, 0, SL.stripX * PT, SL.H * PT)
-       .fill(SL.bgStripColor);
+    // No fill on left strip (white/transparent per user preference)
 
-    // Outer border
+    // Outer border of main content area (right of strip)
     doc.rect(SL.stripX * PT, 0, (SL.W - SL.stripX) * PT, SL.H * PT)
        .lineWidth(1).stroke('#000000');
 
     // Vertical divider between check# and amount columns
-    const dividerX = (SL.colCentsR - SL.colCentsW - SL.colDollarSep - 7 * SL.digitW) * PT;
-    const gridTopPt = SL.gridTop * PT;
-    const gridBotPt = gridBottom * PT;
-    doc.moveTo(dividerX, gridTopPt).lineTo(dividerX, gridBotPt).lineWidth(0.5).stroke(SL.bgLineColor);
+    const dividerX    = (SL.colCentsR - SL.colCentsW - SL.colDollarSep - 7 * SL.digitW) * PT;
+    const gridTopPt   = SL.gridTop * PT;
+    const gridBotPt   = gridBottom * PT;
+    doc.moveTo(dividerX, gridTopPt).lineTo(dividerX, gridBotPt)
+       .lineWidth(0.5).stroke(SL.bgLineColor);
 
     // Vertical divider between dollars and cents
     const dollarsCentsX = (SL.colCentsR - SL.colCentsW - SL.colDollarSep) * PT;
-    doc.moveTo(dollarsCentsX, gridTopPt).lineTo(dollarsCentsX, gridBotPt).lineWidth(0.5).stroke(SL.bgLineColor);
+    doc.moveTo(dollarsCentsX, gridTopPt).lineTo(dollarsCentsX, gridBotPt)
+       .lineWidth(0.5).stroke(SL.bgLineColor);
 
     // Right border of cents column
-    doc.moveTo(SL.colCentsR * PT, gridTopPt).lineTo(SL.colCentsR * PT, gridBotPt).lineWidth(0.5).stroke(SL.bgLineColor);
+    doc.moveTo(SL.colCentsR * PT, gridTopPt).lineTo(SL.colCentsR * PT, gridBotPt)
+       .lineWidth(0.5).stroke(SL.bgLineColor);
 
     // Column header labels
     doc.font('Helvetica').fontSize(6).fillColor(SL.bgLabelColor);
@@ -274,7 +276,7 @@ function generateDepositSlip(account, deposit, items) {
     doc.text('CENTS', (SL.colCentsR - SL.colCentsW) * PT, hdrY,
              { width: SL.colCentsW * PT, align: 'center', lineBreak: false });
 
-    // Horizontal grid lines for all rows
+    // Horizontal grid lines
     for (let r = 0; r <= totalRows + 1; r++) {
       const y = rowTopY(r) * PT;
       doc.moveTo(SL.stripX * PT, y).lineTo(SL.colCentsR * PT, y)
@@ -303,7 +305,7 @@ function generateDepositSlip(account, deposit, items) {
     doc.font('Courier-Bold').fontSize(7).fillColor('#000000');
     doc.text('TOTAL $', SL.cX * PT, rowY(totalRows) * PT - 5, { lineBreak: false });
 
-    // Disclaimer text (below date, above grid)
+    // Top disclaimer (above grid)
     doc.font('Helvetica').fontSize(5).fillColor('#666666')
        .text(
          'DEPOSITS MAY NOT BE AVAILABLE FOR IMMEDIATE WITHDRAWAL',
@@ -311,7 +313,7 @@ function generateDepositSlip(account, deposit, items) {
          { width: (SL.W - SL.cX - 0.05) * PT, lineBreak: false }
        );
 
-    // Bottom disclaimer (inside form, near total row)
+    // Bottom disclaimer (below grid)
     doc.font('Helvetica').fontSize(5).fillColor('#666666')
        .text(
          'Checks and other items are received for deposit subject to the provisions of the Uniform Commercial Code or any applicable collection agreements.',
@@ -320,56 +322,50 @@ function generateDepositSlip(account, deposit, items) {
        );
 
     // DEPOSIT TICKET header
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(SL.bgHeaderColor);
-    const headerText = 'D E P O S I T   T I C K E T';
-    doc.text(headerText, SL.cX * PT, 0.08 * PT,
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(SL.bgHeaderColor)
+       .text('D E P O S I T   T I C K E T', SL.cX * PT, 0.08 * PT,
              { width: (SL.W - SL.cX - 0.05) * PT, align: 'center', lineBreak: false });
 
-    // Vertical separator between depositor and bank columns
-    const midX = ((SL.cX + SL.bankX) / 2) * PT;
-    doc.moveTo(midX, 0.18 * PT).lineTo(midX, (SL.dateY - 0.05) * PT)
-       .lineWidth(0.5).stroke('#aaaaaa');
-
-    // ── Depositor / Bank block ──────────────────────────────────────────────
+    // ── Depositor block — account info, then bank info stacked below ────────
     doc.font('Helvetica-Bold').fontSize(8).fillColor('#000000')
        .text(account.company1 || '', SL.cX * PT, SL.depositorY * PT,
              { lineBreak: false });
-    let depY = SL.depositorY + 0.12;
+    let blockY = SL.depositorY + 0.12;
     doc.font('Helvetica').fontSize(7);
     [account.company2, account.company3, account.company4].forEach(line => {
       if (line) {
-        doc.text(line, SL.cX * PT, depY * PT, { lineBreak: false });
-        depY += 0.10;
+        doc.text(line, SL.cX * PT, blockY * PT, { lineBreak: false });
+        blockY += 0.10;
       }
     });
 
+    // Bank info — stacked below depositor, small gap
+    blockY += 0.06;
     doc.font('Helvetica-Bold').fontSize(8).fillColor('#000000')
-       .text(account.bank_name || '', SL.bankX * PT, SL.depositorY * PT,
-             { lineBreak: false });
-    let bnkY = SL.depositorY + 0.12;
+       .text(account.bank_name || '', SL.cX * PT, blockY * PT, { lineBreak: false });
+    blockY += 0.12;
     doc.font('Helvetica').fontSize(7);
     [account.bank_info1, account.bank_info2].forEach(line => {
       if (line) {
-        doc.text(line, SL.bankX * PT, bnkY * PT, { lineBreak: false });
-        bnkY += 0.10;
+        doc.text(line, SL.cX * PT, blockY * PT, { lineBreak: false });
+        blockY += 0.10;
       }
     });
 
     // ── Date ───────────────────────────────────────────────────────────────
     doc.font('Helvetica').fontSize(7).fillColor(SL.bgLabelColor)
        .text('DATE', SL.cX * PT, SL.dateY * PT, { lineBreak: false });
-    // Underline
+    // Underline (positioned lower than the label text)
     const dateUnderX1 = (SL.cX + 0.33) * PT;
     const dateUnderX2 = (SL.dateValueX + 0.85) * PT;
-    const dateUnderY  = (SL.dateY + 0.01) * PT;
+    const dateUnderY  = (SL.dateY + 0.09) * PT;
     doc.moveTo(dateUnderX1, dateUnderY).lineTo(dateUnderX2, dateUnderY)
        .lineWidth(0.5).stroke('#000000');
     doc.font('Courier').fontSize(8).fillColor('#000000')
-       .text(deposit.deposit_date || '', (SL.cX + 0.36) * PT, (SL.dateY - 0.03) * PT,
+       .text(deposit.deposit_date || '', (SL.cX + 0.36) * PT, (SL.dateY - 0.01) * PT,
              { lineBreak: false });
 
     // ── Amount data ─────────────────────────────────────────────────────────
-    // Draw digits in fixed-width slots, right-aligned in the dollars column
     const dollarsRightX = (SL.colCentsR - SL.colCentsW - SL.colDollarSep);
 
     function drawAmountRow(amount, rowIdx) {
@@ -381,12 +377,9 @@ function generateDepositSlip(account, deposit, items) {
     drawAmountRow(deposit.currency || 0, SL.currencyRow);
     drawAmountRow(deposit.coin     || 0, SL.coinRow);
 
-    // Check items
     items.slice(0, SL.maxChecks).forEach((item, i) => {
       const r = SL.firstCheckRow + i;
       const y = (rowY(r) - 0.015) * PT;
-
-      // Check number
       if (item.check_no) {
         doc.font('Courier').fontSize(7).fillColor('#000000')
            .text(String(item.check_no).slice(0, 8),
@@ -396,19 +389,21 @@ function generateDepositSlip(account, deposit, items) {
       drawAmountRow(item.amount || 0, r);
     });
 
-    // Total $ row
     drawAmountRow(checksTotal, totalRows);
 
     // ── Rotated left strip elements ─────────────────────────────────────────
+    // All elements use rotate(90): text flows downward on the page, which reads
+    // correctly when you tilt your head to the LEFT (standard bank deposit orientation).
+    // stripCenterX centers the text baseline within the 0.625" strip.
 
-    // MICR line (routing + account, no check number for deposits)
     const routing = (account.routing_number || '').replace(/\D/g, '');
     const acctNo  = (account.account_number || '').replace(/[^0-9]/g, '');
     const micrStr = `A${routing}A ${acctNo}C`;
 
+    // MICR line — centered in strip, near bottom
     doc.save();
-    doc.translate(SL.micrX * PT, SL.micrY * PT);
-    doc.rotate(-90);
+    doc.translate(SL.stripCenterX * PT, SL.micrY * PT);
+    doc.rotate(90);
     if (hasMicrFont) {
       doc.font('MICR').fontSize(11).fillColor('#000000')
          .text(micrStr, 0, 0, { lineBreak: false });
@@ -418,31 +413,34 @@ function generateDepositSlip(account, deposit, items) {
     }
     doc.restore();
 
-    // Rotated "DEPOSIT TOTAL $" label + amount
+    // "DEPOSIT TOTAL $" label
     doc.save();
-    doc.translate(SL.depTotalX * PT, SL.depTotalLabelY * PT);
-    doc.rotate(-90);
+    doc.translate(SL.stripCenterX * PT, SL.depTotalLabelY * PT);
+    doc.rotate(90);
     doc.font('Helvetica').fontSize(6).fillColor(SL.bgLabelColor)
        .text('DEPOSIT TOTAL $', 0, 0, { lineBreak: false });
     doc.restore();
 
-    // Deposit total digits (rotated, spaced)
-    drawRotatedDigitAmount(doc, depositTotal, SL.depTotalX, SL.depTotalAmtY);
+    // Deposit total digits (includes decimal point)
+    drawRotatedDigitAmount(doc, depositTotal, SL.stripCenterX, SL.depTotalAmtY);
 
-    // Rotated "TOTAL ITEMS" label + count
+    // "TOTAL ITEMS" label
     doc.save();
-    doc.translate(SL.checkCountX * PT, SL.checkCountLabelY * PT);
-    doc.rotate(-90);
+    doc.translate(SL.stripCenterX * PT, SL.checkCountLabelY * PT);
+    doc.rotate(90);
     doc.font('Helvetica').fontSize(6).fillColor(SL.bgLabelColor)
        .text('TOTAL ITEMS', 0, 0, { lineBreak: false });
     doc.restore();
 
+    // Check count value
     doc.save();
-    doc.translate(SL.checkCountX * PT, SL.checkCountValY * PT);
-    doc.rotate(-90);
+    doc.translate(SL.stripCenterX * PT, SL.checkCountValY * PT);
+    doc.rotate(90);
     doc.font('Courier').fontSize(9).fillColor('#000000')
        .text(String(checkCount), 0, 0, { lineBreak: false });
     doc.restore();
+
+    doc.restore(); // end slip position translate
 
     doc.end();
   });
@@ -486,21 +484,23 @@ function drawDigitAmount(doc, amount, dollarsRightX, y) {
 }
 
 /**
- * Draw deposit total digits rotated 90° in the left strip.
- * Each digit is stacked vertically (reading downward when viewed in portrait).
+ * Draw deposit total digits in the left strip using rotate(90).
+ * Each character is stacked top-to-bottom on the page; reads correctly
+ * when tilting head left. Includes a '.' decimal separator.
  */
-function drawRotatedDigitAmount(doc, amount, stripX, startY) {
+function drawRotatedDigitAmount(doc, amount, stripCenterX, startY) {
   const totalCents = Math.round(Math.abs(amount) * 100);
   const dollars    = Math.floor(totalCents / 100);
   const cents      = totalCents % 100;
-  const fullStr    = String(dollars) + String(cents).padStart(2, '0');
-  const spacing    = 0.16; // inches between each digit
+  // Include decimal point between dollars and cents
+  const fullStr    = String(dollars) + '.' + String(cents).padStart(2, '0');
+  const spacing    = 0.16; // inches between each character
 
   doc.font('Courier').fontSize(9).fillColor('#000000');
   fullStr.split('').forEach((ch, i) => {
     doc.save();
-    doc.translate(stripX * PT, (startY - i * spacing) * PT);
-    doc.rotate(-90);
+    doc.translate(stripCenterX * PT, (startY + i * spacing) * PT);
+    doc.rotate(90);
     doc.text(ch, 0, 0, { lineBreak: false });
     doc.restore();
   });

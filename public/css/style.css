@@ -79,6 +79,14 @@ header {
 .toolbar-right { display: flex; align-items: center; gap: 8px; }
 .toolbar label { font-size: 12px; font-weight: 500; color: var(--text-muted); }
 
+.checks-summary {
+  padding: 3px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  min-height: 20px;
+}
+
 select {
   border: 1px solid var(--border);
   border-radius: 4px;
