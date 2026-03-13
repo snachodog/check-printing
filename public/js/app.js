@@ -70,7 +70,6 @@ function renderTable() {
 
   tbody.innerHTML = checks.map(renderRow).join('');
   updateSortIndicators();
-  updateCheckboxStates();
 
   // Attach row-level event listeners
   tbody.querySelectorAll('input[type="checkbox"]').forEach(cb => {
@@ -157,14 +156,6 @@ function updateSortIndicators() {
   });
 }
 
-function updateCheckboxStates() {
-  document.querySelectorAll('#checks-tbody input[type="checkbox"]').forEach(cb => {
-    const id = parseInt(cb.dataset.id, 10);
-    if (!state.selected.has(id)) {
-      cb.disabled = state.selected.size >= 3;
-    }
-  });
-}
 
 function refreshPdfButton() {
   const n = state.selected.size;
@@ -178,16 +169,11 @@ function refreshPdfButton() {
 function onCheckboxChange(cb) {
   const id = parseInt(cb.dataset.id, 10);
   if (cb.checked) {
-    if (state.selected.size >= 3) {
-      cb.checked = false;
-      return;
-    }
     state.selected.add(id);
   } else {
     state.selected.delete(id);
   }
   refreshPdfButton();
-  updateCheckboxStates();
 }
 
 // ── Slide-in panel ───────────────────────────────────────────────────────────
@@ -298,7 +284,7 @@ async function deleteCheck(id) {
 
 async function generatePdf() {
   const ids = [...state.selected];
-  if (ids.length === 0 || ids.length > 3) return;
+  if (ids.length === 0) return;
 
   const btn = document.getElementById('btn-generate-pdf');
   btn.disabled = true;

@@ -17,8 +17,8 @@ const { generateCheckPdf } = require('../services/pdfService');
 router.post('/', async (req, res) => {
   const { checkIds } = req.body;
 
-  if (!Array.isArray(checkIds) || checkIds.length === 0 || checkIds.length > 3) {
-    return res.status(400).json({ error: 'checkIds must be an array of 1–3 IDs' });
+  if (!Array.isArray(checkIds) || checkIds.length === 0) {
+    return res.status(400).json({ error: 'checkIds must be a non-empty array' });
   }
 
   // Fetch account
