@@ -154,6 +154,8 @@ app.post('/api/account/setup', (req, res) => {
 
 // TODO: Add deposit slip support -- deposits table, PDF generation, ledger, and slide-in entry form
 
+app.use('/api/qbo-import', require('./routes/qbo-import'));
+
 // .mdb import endpoint — always creates a new account
 app.post('/api/import', upload.single('mdbfile'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });

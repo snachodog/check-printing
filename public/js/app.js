@@ -644,6 +644,188 @@ async function saveAccountSettings() {
   }
 }
 
+// ── QBO Import ────────────────────────────────────────────────────────────────
+
+let qboChecksRecords = null;
+let qboDepositsRecords = null;
+
+function openQboImport(tab) {
+  switchQboTab(tab || 'checks');
+  resetQboPane('checks');
+  resetQboPane('deposits');
+  document.getElementById('qbo-import-overlay').classList.add('open');
+  document.getElementById('qbo-import-modal').classList.add('open');
+}
+
+function closeQboImport() {
+  document.getElementById('qbo-import-overlay').classList.remove('open');
+  document.getElementById('qbo-import-modal').classList.remove('open');
+}
+
+function resetQboPane(type) {
+  document.getElementById(`qbo-${type}-file`).value = '';
+  document.getElementById(`qbo-${type}-preview`).hidden = true;
+  document.getElementById(`qbo-${type}-preview`).innerHTML = '';
+  document.getElementById(`qbo-${type}-result`).hidden = true;
+  document.getElementById(`qbo-${type}-result`).textContent = '';
+  document.getElementById(`qbo-${type}-error`).hidden = true;
+  document.getElementById(`qbo-${type}-error`).textContent = '';
+  document.getElementById(`btn-qbo-${type}-import`).hidden = true;
+  document.getElementById(`btn-qbo-${type}-import`).disabled = true;
+  if (type === 'checks') qboChecksRecords = null;
+  else qboDepositsRecords = null;
+}
+
+function switchQboTab(tab) {
+  document.querySelectorAll('.qbo-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.getElementById('qbo-pane-checks').hidden = tab !== 'checks';
+  document.getElementById('qbo-pane-deposits').hidden = tab !== 'deposits';
+}
+
+async function qboParseFile(type) {
+  const fileInput = document.getElementById(`qbo-${type}-file`);
+  const errEl     = document.getElementById(`qbo-${type}-error`);
+  const previewEl = document.getElementById(`qbo-${type}-preview`);
+  const resultEl  = document.getElementById(`qbo-${type}-result`);
+  const importBtn = document.getElementById(`btn-qbo-${type}-import`);
+  const parseBtn  = document.getElementById(`btn-qbo-${type}-parse`);
+
+  errEl.hidden = true;
+  previewEl.hidden = true;
+  previewEl.innerHTML = '';
+  resultEl.hidden = true;
+  importBtn.hidden = true;
+  importBtn.disabled = true;
+
+  const file = fileInput.files[0];
+  if (!file) { errEl.textContent = 'Select a CSV file first.'; errEl.hidden = false; return; }
+
+  parseBtn.disabled = true;
+  parseBtn.textContent = 'Parsing\u2026';
+
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('type', type);
+    const resp = await fetch('/api/qbo-import/parse', { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Parse failed');
+
+    if (type === 'checks') {
+      qboChecksRecords = data.records;
+      previewEl.innerHTML = buildChecksPreviewHTML(data.records, data.warnings);
+    } else {
+      qboDepositsRecords = data.records;
+      previewEl.innerHTML = buildDepositsPreviewHTML(data.records, data.warnings);
+    }
+    previewEl.hidden = false;
+    const depCount = type === 'deposits' ? countDepositDates(data.records) : 0;
+    importBtn.textContent = type === 'checks'
+      ? `Import ${data.records.length} Check${data.records.length !== 1 ? 's' : ''}`
+      : `Import ${depCount} Deposit${depCount !== 1 ? 's' : ''}`;
+    importBtn.hidden = false;
+    importBtn.disabled = false;
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.hidden = false;
+  } finally {
+    parseBtn.disabled = false;
+    parseBtn.textContent = 'Preview';
+  }
+}
+
+function countDepositDates(records) {
+  return new Set(records.map(r => r.date)).size;
+}
+
+const fmtCurrency = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
+const fmtDateDisp = iso => { const [y, m, d] = iso.split('-'); return `${m}/${d}/${y}`; };
+
+function buildChecksPreviewHTML(records, warnings) {
+  let html = `<div class="qbo-preview-count">${records.length} check${records.length !== 1 ? 's' : ''} found</div>`;
+  if (warnings && warnings.length) {
+    html += `<div class="qbo-warnings">${warnings.map(w => escHtml(w)).join('<br>')}</div>`;
+  }
+  html += `<div class="qbo-preview-scroll"><table class="qbo-preview-table">
+    <thead><tr><th>Date</th><th>Payee</th><th style="text-align:right">Amount</th><th>Memo</th><th>Check #</th></tr></thead>
+    <tbody>`;
+  for (const r of records) {
+    html += `<tr>
+      <td>${escHtml(fmtDateDisp(r.date))}</td>
+      <td>${escHtml(r.payee || '')}</td>
+      <td style="text-align:right;font-family:monospace">${escHtml(fmtCurrency(r.amount))}</td>
+      <td class="text-muted">${escHtml(r.memo || '')}</td>
+      <td class="text-muted">${r.check_no ? escHtml(String(r.check_no)) : '<em>auto</em>'}</td>
+    </tr>`;
+  }
+  html += '</tbody></table></div>';
+  return html;
+}
+
+function buildDepositsPreviewHTML(records, warnings) {
+  const byDate = new Map();
+  for (const r of records) {
+    if (!byDate.has(r.date)) byDate.set(r.date, []);
+    byDate.get(r.date).push(r);
+  }
+  const dateCount = byDate.size;
+  let html = `<div class="qbo-preview-count">${records.length} item${records.length !== 1 ? 's' : ''} across ${dateCount} deposit${dateCount !== 1 ? 's' : ''}</div>`;
+  if (warnings && warnings.length) {
+    html += `<div class="qbo-warnings">${warnings.map(w => escHtml(w)).join('<br>')}</div>`;
+  }
+  html += `<div class="qbo-preview-scroll"><table class="qbo-preview-table">
+    <thead><tr><th>Date</th><th>Items</th><th style="text-align:right">Total</th></tr></thead>
+    <tbody>`;
+  for (const [date, items] of byDate) {
+    const total = items.reduce((s, i) => s + i.amount, 0);
+    html += `<tr>
+      <td>${escHtml(fmtDateDisp(date))}</td>
+      <td class="text-muted">${items.length} item${items.length !== 1 ? 's' : ''}</td>
+      <td style="text-align:right;font-family:monospace">${escHtml(fmtCurrency(total))}</td>
+    </tr>`;
+  }
+  html += '</tbody></table></div>';
+  return html;
+}
+
+async function qboConfirmImport(type) {
+  const records = type === 'checks' ? qboChecksRecords : qboDepositsRecords;
+  const errEl    = document.getElementById(`qbo-${type}-error`);
+  const resultEl = document.getElementById(`qbo-${type}-result`);
+  const importBtn = document.getElementById(`btn-qbo-${type}-import`);
+
+  errEl.hidden = true;
+  importBtn.disabled = true;
+  importBtn.textContent = 'Importing\u2026';
+
+  try {
+    const data = await apiFetch('POST', '/api/qbo-import/confirm', {
+      type, records, account_id: state.activeAccountId,
+    });
+
+    if (type === 'checks') {
+      resultEl.textContent = `Imported ${data.imported} check${data.imported !== 1 ? 's' : ''}${data.skipped ? `, skipped ${data.skipped} duplicate${data.skipped !== 1 ? 's' : ''}` : ''}.`;
+      await loadChecks();
+      await loadAccounts();
+      renderHeader();
+    } else {
+      resultEl.textContent = `Imported ${data.imported} deposit${data.imported !== 1 ? 's' : ''} (${data.itemCount} items).`;
+      if (typeof loadDeposits === 'function') await loadDeposits();
+    }
+    resultEl.hidden = false;
+    importBtn.hidden = true;
+
+    document.getElementById(`qbo-${type}-file`).value = '';
+    if (type === 'checks') qboChecksRecords = null;
+    else qboDepositsRecords = null;
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.hidden = false;
+    importBtn.disabled = false;
+    importBtn.textContent = type === 'checks' ? 'Import Checks' : 'Import Deposits';
+  }
+}
+
 // ── Set next check number ─────────────────────────────────────────────────────
 
 function openSetCheckNo() {
@@ -1115,6 +1297,22 @@ function init() {
   ['dep-currency', 'dep-coin', 'dep-cashback'].forEach(id => {
     document.getElementById(id).addEventListener('input', recalcDepTotals);
   });
+
+  // QBO Import
+  document.querySelectorAll('[data-open-qbo]').forEach(btn =>
+    btn.addEventListener('click', () => openQboImport(btn.dataset.openQbo))
+  );
+  document.getElementById('btn-close-qbo-import').addEventListener('click', closeQboImport);
+  document.getElementById('qbo-import-overlay').addEventListener('click', closeQboImport);
+  document.querySelectorAll('.qbo-tab').forEach(t =>
+    t.addEventListener('click', () => switchQboTab(t.dataset.tab))
+  );
+  document.getElementById('btn-qbo-checks-parse').addEventListener('click', () => qboParseFile('checks'));
+  document.getElementById('btn-qbo-deposits-parse').addEventListener('click', () => qboParseFile('deposits'));
+  document.getElementById('btn-qbo-checks-import').addEventListener('click', () => qboConfirmImport('checks'));
+  document.getElementById('btn-qbo-deposits-import').addEventListener('click', () => qboConfirmImport('deposits'));
+  document.getElementById('btn-qbo-checks-cancel').addEventListener('click', closeQboImport);
+  document.getElementById('btn-qbo-deposits-cancel').addEventListener('click', closeQboImport);
 
   // Initial data load
   loadAccounts();
