@@ -159,7 +159,7 @@ function generateCheckPdf(account, checks, fields) {
             const endPos = pt(field.x_end_pos, field.y_end_pos);
             doc.moveTo(pos.x, pos.y)
                .lineTo(endPos.x, endPos.y)
-               .lineWidth(field.line_thick || 1)
+               .lineWidth((field.line_thick || 1) * 0.5)
                .stroke('#000000');
             break;
           }
@@ -208,6 +208,21 @@ function generateCheckPdf(account, checks, fields) {
             }
             break;
           }
+        }
+      }
+
+      // --- Second signature line ---
+      if (account.second_signature) {
+        const sigLine = bodyFields.find(
+          f => f.field_type === 'Line' && f.field_name.toLowerCase().includes('signature')
+        );
+        if (sigLine) {
+          const p1 = pt(sigLine.x_pos,     sigLine.y_pos     - 0.25);
+          const p2 = pt(sigLine.x_end_pos, sigLine.y_end_pos - 0.25);
+          doc.moveTo(p1.x, p1.y)
+             .lineTo(p2.x, p2.y)
+             .lineWidth((sigLine.line_thick || 1) * 0.5)
+             .stroke('#000000');
         }
       }
 

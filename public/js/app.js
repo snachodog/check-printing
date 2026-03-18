@@ -572,6 +572,7 @@ function openAccountSettings() {
   f.elements.offset_right.value = a.offset_right || 0;
   f.elements.offset_up.value    = a.offset_up    || 0;
   f.elements.offset_down.value  = a.offset_down  || 0;
+  document.getElementById('as-second-sig').checked = !!a.second_signature;
 
   document.getElementById('as-logo').value = '';
   document.getElementById('as-logo-preview').hidden = true;
@@ -608,8 +609,9 @@ async function saveAccountSettings() {
     offset_left:    parseFloat(f.elements.offset_left.value)  || 0,
     offset_right:   parseFloat(f.elements.offset_right.value) || 0,
     offset_up:      parseFloat(f.elements.offset_up.value)    || 0,
-    offset_down:    parseFloat(f.elements.offset_down.value)  || 0,
-    logo_data:      acctSettings.logoData || null,
+    offset_down:      parseFloat(f.elements.offset_down.value)  || 0,
+    second_signature: document.getElementById('as-second-sig').checked ? 1 : 0,
+    logo_data:        acctSettings.logoData || null,
   };
 
   if (!payload.company1) {

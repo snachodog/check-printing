@@ -305,6 +305,8 @@ td {
   color: var(--text-muted);
 }
 .form-group.required label::after { content: ' *'; color: var(--danger); }
+.form-group-check { flex-direction: row; align-items: center; }
+.form-group-check label { text-transform: none; font-weight: normal; font-size: 12px; letter-spacing: 0; cursor: pointer; display: flex; align-items: center; gap: 6px; }
 
 .form-group input {
   border: 1px solid var(--border);

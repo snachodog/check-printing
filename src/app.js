@@ -39,7 +39,7 @@ app.put('/api/account/:id', (req, res) => {
     bank_name, bank_info1, bank_info2, bank_info3, transit_code,
     routing_number, account_number,
     offset_left, offset_right, offset_up, offset_down,
-    logo_data,
+    logo_data, second_signature,
   } = req.body;
 
   if (!company1 || !routing_number || !account_number) {
@@ -52,6 +52,7 @@ app.put('/api/account/:id', (req, res) => {
       bank_name = ?, bank_info1 = ?, bank_info2 = ?, bank_info3 = ?, transit_code = ?,
       routing_number = ?, account_number = ?,
       offset_left = ?, offset_right = ?, offset_up = ?, offset_down = ?,
+      second_signature = ?,
       logo_data = CASE WHEN ? IS NOT NULL THEN ? ELSE logo_data END,
       updated_at = datetime('now')
     WHERE id = ?
@@ -61,6 +62,7 @@ app.put('/api/account/:id', (req, res) => {
     routing_number, account_number,
     parseFloat(offset_left) || 0, parseFloat(offset_right) || 0,
     parseFloat(offset_up) || 0, parseFloat(offset_down) || 0,
+    second_signature ? 1 : 0,
     logo_data || null, logo_data || null,
     req.params.id
   );
@@ -68,7 +70,7 @@ app.put('/api/account/:id', (req, res) => {
   res.json(db.prepare(
     'SELECT id, bank_name, bank_info1, bank_info2, bank_info3, transit_code, ' +
     'routing_number, account_number, current_check_no, ' +
-    'company1, company2, company3, company4, check_position FROM account WHERE id = ?'
+    'company1, company2, company3, company4, check_position, second_signature FROM account WHERE id = ?'
   ).get(req.params.id));
 });
 
@@ -78,7 +80,7 @@ app.get('/api/account/:id', (req, res) => {
   const account = db.prepare(
     'SELECT id, bank_name, bank_info1, bank_info2, bank_info3, transit_code, ' +
     'routing_number, account_number, current_check_no, ' +
-    'company1, company2, company3, company4, check_position FROM account WHERE id = ?'
+    'company1, company2, company3, company4, check_position, second_signature FROM account WHERE id = ?'
   ).get(req.params.id);
   if (!account) return res.status(404).json({ error: 'Account not found.' });
   res.json(account);

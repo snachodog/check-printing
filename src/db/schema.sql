@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS account (
   company4          TEXT,
   logo_data         TEXT,
   signature_data    TEXT,
+  second_signature  INTEGER NOT NULL DEFAULT 0,
   blank_stock       INTEGER NOT NULL DEFAULT 1,
   check_position    TEXT NOT NULL DEFAULT '3-per-page',
   created_at        TEXT NOT NULL DEFAULT (datetime('now')),

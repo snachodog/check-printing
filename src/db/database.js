@@ -93,6 +93,12 @@ if (!lfInfo.some(c => c.name === 'account_id')) {
   `);
 }
 
+// Migration: add second_signature column to account
+const acctInfo = db.prepare('PRAGMA table_info(account)').all();
+if (!acctInfo.some(c => c.name === 'second_signature')) {
+  db.exec('ALTER TABLE account ADD COLUMN second_signature INTEGER NOT NULL DEFAULT 0');
+}
+
 // Create account_id indexes unconditionally (safe after migrations have run)
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_checks_account ON checks(account_id);
