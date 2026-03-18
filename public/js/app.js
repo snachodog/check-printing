@@ -87,7 +87,7 @@ function renderHeader() {
   const a = state.account;
   if (!a) return;
   document.getElementById('company-name').textContent = a.company1 || 'ezcheck';
-  document.getElementById('current-check-no').textContent = (a.current_check_no + 1).toLocaleString();
+  document.getElementById('current-check-no').textContent = a.current_check_no + 1;
 }
 
 function renderTable() {
