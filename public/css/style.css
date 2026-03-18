@@ -85,6 +85,38 @@ header {
   line-height: 1.5;
 }
 
+.modal-wide { width: min(720px, 96vw); }
+
+.qbo-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: #f9f9f9;
+  padding: 0 16px;
+}
+.qbo-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--text-muted);
+  margin-bottom: -1px;
+}
+.qbo-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+.qbo-tab:hover:not(.active) { color: var(--text); }
+
+.qbo-preview-count { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+.qbo-warnings { font-size: 11px; color: #b45309; background: #fef9c3; border: 1px solid #ca8a04; border-radius: 3px; padding: 6px 8px; margin-bottom: 8px; }
+.qbo-preview-scroll { max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; }
+.qbo-preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.qbo-preview-table th { background: #f5f5f5; padding: 5px 8px; text-align: left; font-weight: 600; position: sticky; top: 0; border-bottom: 1px solid var(--border); }
+.qbo-preview-table td { padding: 4px 8px; border-bottom: 1px solid #f0f0f0; }
+.qbo-preview-table tr:last-child td { border-bottom: none; }
+.qbo-preview-table .text-muted { color: var(--text-muted); }
+.import-result { font-size: 13px; color: #15803d; background: #f0fdf4; border: 1px solid #86efac; border-radius: 4px; padding: 8px 12px; margin-top: 8px; }
+
 /* ── Toolbar ── */
 .toolbar {
   display: flex;

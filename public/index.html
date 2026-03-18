@@ -42,6 +42,7 @@
       </button>
       <button id="btn-new-check" class="btn-secondary">+ New Check</button>
       <button id="btn-import" class="btn-secondary">Import .mdb</button>
+      <button class="btn-secondary" data-open-qbo="checks">Import QBO</button>
     </div>
   </div>
 
@@ -83,6 +84,7 @@
     </div>
     <div class="toolbar-right">
       <button id="btn-new-deposit" class="btn-secondary">+ New Deposit</button>
+      <button class="btn-secondary" data-open-qbo="deposits">Import QBO</button>
     </div>
   </div>
   <div class="table-wrap">
@@ -408,6 +410,55 @@
     <div class="modal-footer">
       <button id="btn-confirm-set-check-no" class="btn-primary">Set Number</button>
       <button id="btn-cancel-set-check-no" class="btn-ghost">Cancel</button>
+    </div>
+  </div>
+
+  <!-- QBO Import modal -->
+  <div id="qbo-import-overlay" class="modal-overlay"></div>
+  <div id="qbo-import-modal" class="modal modal-wide" role="dialog" aria-labelledby="qbo-import-title">
+    <div class="modal-header">
+      <h2 id="qbo-import-title">Import from QuickBooks Online</h2>
+      <button id="btn-close-qbo-import" class="btn-icon" title="Close">×</button>
+    </div>
+    <div class="qbo-tabs">
+      <button class="qbo-tab active" data-tab="checks">Checks to Print</button>
+      <button class="qbo-tab" data-tab="deposits">Deposits</button>
+    </div>
+    <!-- Checks pane -->
+    <div class="qbo-pane" id="qbo-pane-checks">
+      <div class="modal-body">
+        <p class="modal-desc">Export a <strong>Transaction List</strong> or <strong>Check Detail</strong> report from QBO (filtered to checks) as CSV, then upload it here. Checks will be imported as unprinted.</p>
+        <div class="form-group">
+          <label for="qbo-checks-file">QBO CSV export</label>
+          <input type="file" id="qbo-checks-file" accept=".csv,.txt">
+        </div>
+        <div id="qbo-checks-preview" hidden></div>
+        <div id="qbo-checks-result" class="import-result" hidden></div>
+        <div id="qbo-checks-error" class="wizard-error" hidden></div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-qbo-checks-parse" class="btn-secondary">Preview</button>
+        <button id="btn-qbo-checks-import" class="btn-primary" hidden disabled>Import</button>
+        <button id="btn-qbo-checks-cancel" class="btn-ghost">Cancel</button>
+      </div>
+    </div>
+    <!-- Deposits pane -->
+    <div class="qbo-pane" id="qbo-pane-deposits" hidden>
+      <div class="modal-body">
+        <p class="modal-desc">Export a <strong>Deposit Detail</strong> report from QBO as CSV. Deposits are grouped by date — one deposit record per day.</p>
+        <div class="form-group">
+          <label for="qbo-deposits-file">QBO CSV export</label>
+          <input type="file" id="qbo-deposits-file" accept=".csv,.txt">
+        </div>
+        <div id="qbo-deposits-preview" hidden></div>
+        <div id="qbo-deposits-result" class="import-result" hidden></div>
+        <div id="qbo-deposits-error" class="wizard-error" hidden></div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-qbo-deposits-parse" class="btn-secondary">Preview</button>
+        <button id="btn-qbo-deposits-import" class="btn-primary" hidden disabled>Import</button>
+        <button id="btn-qbo-deposits-cancel" class="btn-ghost">Cancel</button>
+      </div>
     </div>
   </div>
 
