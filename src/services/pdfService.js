@@ -138,7 +138,7 @@ function generateCheckPdf(account, checks, fields) {
 
       for (let slot = 0; slot < 3; slot++) {
       const check = checks[page * 3 + slot] || null;
-      const slotOriginY = slot * SLOT_HEIGHT_IN;
+      const slotOriginY = slot * SLOT_HEIGHT_IN + (slot === 0 ? -0.25 : 0);
 
       // Helper: convert inches (relative to slot) to PDF points (absolute page)
       const pt = (xIn, yIn) => ({
