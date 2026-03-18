@@ -84,6 +84,24 @@ app.get('/api/account/:id', (req, res) => {
   res.json(account);
 });
 
+// PUT /api/account/:id/check-no - override the next check number
+app.put('/api/account/:id/check-no', (req, res) => {
+  const db = require('./db/database');
+  const account = db.prepare('SELECT id FROM account WHERE id = ?').get(req.params.id);
+  if (!account) return res.status(404).json({ error: 'Account not found.' });
+
+  const next = parseInt(req.body.next_check_no, 10);
+  if (isNaN(next) || next < 1) {
+    return res.status(400).json({ error: 'Next check number must be a positive integer.' });
+  }
+
+  // current_check_no is the last-used number; next check will be current_check_no + 1
+  db.prepare("UPDATE account SET current_check_no = ?, updated_at = datetime('now') WHERE id = ?")
+    .run(next - 1, req.params.id);
+
+  res.json({ next_check_no: next });
+});
+
 // POST /api/account/setup - create a new account (wizard)
 app.post('/api/account/setup', (req, res) => {
   const db = require('./db/database');
