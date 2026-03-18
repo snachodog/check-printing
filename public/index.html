@@ -13,7 +13,7 @@
       <select id="account-switcher" class="account-switcher" title="Switch account"></select>
       <button id="btn-account-settings" class="btn-header-icon" title="Account settings">⚙</button>
     </div>
-    <span class="header-info">Next check: <strong id="current-check-no">—</strong></span>
+    <span class="header-info">Next check: <strong id="current-check-no">—</strong><button id="btn-set-check-no" class="btn-header-inline" title="Set next check number">✎</button></span>
   </header>
 
   <!-- View nav tabs -->
@@ -380,6 +380,29 @@
     <div class="modal-footer">
       <button id="btn-save-acct-settings" class="btn-primary">Save Changes</button>
       <button id="btn-cancel-acct-settings" class="btn-ghost">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Set next check number modal -->
+  <div id="set-check-no-overlay" class="modal-overlay"></div>
+  <div id="set-check-no-modal" class="modal" role="dialog" aria-labelledby="set-check-no-title">
+    <div class="modal-header">
+      <h2 id="set-check-no-title">Set Next Check Number</h2>
+      <button id="btn-close-set-check-no" class="btn-icon" title="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="warning-box">
+        <strong>Warning:</strong> Changing the next check number can create duplicate check numbers or gaps in your sequence. Only do this if checks were printed outside this system or your book was restarted.
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label for="set-check-no-input">Next check number</label>
+        <input type="number" id="set-check-no-input" min="1" step="1" style="width:120px">
+      </div>
+      <div id="set-check-no-error" class="wizard-error" hidden></div>
+    </div>
+    <div class="modal-footer">
+      <button id="btn-confirm-set-check-no" class="btn-primary">Set Number</button>
+      <button id="btn-cancel-set-check-no" class="btn-ghost">Cancel</button>
     </div>
   </div>
 

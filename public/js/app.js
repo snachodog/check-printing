@@ -642,6 +642,49 @@ async function saveAccountSettings() {
   }
 }
 
+// ── Set next check number ─────────────────────────────────────────────────────
+
+function openSetCheckNo() {
+  const current = state.account ? state.account.current_check_no + 1 : 1;
+  document.getElementById('set-check-no-input').value = current;
+  document.getElementById('set-check-no-error').hidden = true;
+  document.getElementById('set-check-no-overlay').classList.add('open');
+  document.getElementById('set-check-no-modal').classList.add('open');
+  document.getElementById('set-check-no-input').focus();
+  document.getElementById('set-check-no-input').select();
+}
+
+function closeSetCheckNo() {
+  document.getElementById('set-check-no-overlay').classList.remove('open');
+  document.getElementById('set-check-no-modal').classList.remove('open');
+}
+
+async function saveSetCheckNo() {
+  const errEl = document.getElementById('set-check-no-error');
+  const input = document.getElementById('set-check-no-input');
+  const next = parseInt(input.value, 10);
+  if (isNaN(next) || next < 1) {
+    errEl.textContent = 'Enter a valid check number (1 or higher).';
+    errEl.hidden = false;
+    return;
+  }
+  const btn = document.getElementById('btn-confirm-set-check-no');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    await apiFetch('PUT', `/api/account/${state.activeAccountId}/check-no`, { next_check_no: next });
+    state.account.current_check_no = next - 1;
+    renderHeader();
+    closeSetCheckNo();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.hidden = false;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Set Number';
+  }
+}
+
 // ── Deposits ─────────────────────────────────────────────────────────────────
 
 const depState = {
@@ -1013,6 +1056,16 @@ function init() {
   document.getElementById('btn-cancel-acct-settings').addEventListener('click', closeAccountSettings);
   document.getElementById('acct-settings-overlay').addEventListener('click', closeAccountSettings);
   document.getElementById('btn-save-acct-settings').addEventListener('click', saveAccountSettings);
+
+  document.getElementById('btn-set-check-no').addEventListener('click', openSetCheckNo);
+  document.getElementById('btn-close-set-check-no').addEventListener('click', closeSetCheckNo);
+  document.getElementById('btn-cancel-set-check-no').addEventListener('click', closeSetCheckNo);
+  document.getElementById('set-check-no-overlay').addEventListener('click', closeSetCheckNo);
+  document.getElementById('btn-confirm-set-check-no').addEventListener('click', saveSetCheckNo);
+  document.getElementById('set-check-no-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveSetCheckNo();
+    if (e.key === 'Escape') closeSetCheckNo();
+  });
   document.getElementById('as-logo').addEventListener('change', e => {
     const file = e.target.files[0];
     if (!file) { acctSettings.logoData = null; return; }
