@@ -1268,6 +1268,9 @@ function renderDepositsTable() {
     return;
   }
 
+  const isEditor = state.accountRole === 'editor' ||
+    (!state.accountRole && state.user && (state.user.role === 'admin' || state.user.role === 'editor'));
+
   tbody.innerHTML = list.map(d => {
     const cashTotal    = (d.currency || 0) + (d.coin || 0);
     const checksTotal  = d.checks_total || 0;
@@ -1276,6 +1279,10 @@ function renderDepositsTable() {
     const badge        = printed
       ? '<span class="status-badge status-printed">Printed</span>'
       : '<span class="status-badge status-unprinted">Unprinted</span>';
+    const actions = isEditor
+      ? `<button class="btn-sm btn-edit dep-btn-edit" data-id="${d.id}">Edit</button>` +
+        `<button class="btn-sm btn-delete dep-btn-delete" data-id="${d.id}">Delete</button>`
+      : '';
     return `<tr class="${printed ? 'printed' : ''}">
       <td class="col-date">${fmtDate(d.deposit_date)}</td>
       <td class="col-amount" style="text-align:right">${fmt(checksTotal)}</td>
@@ -1284,10 +1291,7 @@ function renderDepositsTable() {
       <td class="col-amount" style="text-align:right"><strong>${fmt(depositTotal)}</strong></td>
       <td style="text-align:center">${d.item_count || 0}</td>
       <td class="col-status">${badge}</td>
-      <td class="col-actions">
-        <button class="btn-sm btn-edit dep-btn-edit" data-id="${d.id}">Edit</button>
-        <button class="btn-sm btn-delete dep-btn-delete" data-id="${d.id}">Delete</button>
-      </td>
+      <td class="col-actions">${actions}</td>
     </tr>`;
   }).join('');
 

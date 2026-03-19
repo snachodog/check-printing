@@ -85,9 +85,9 @@
       <button id="btn-generate-pdf" class="btn-primary" disabled>
         Generate PDF <span id="selected-count" class="badge">0</span>
       </button>
-      <button id="btn-new-check" class="btn-secondary">+ New Check</button>
-      <button id="btn-import" class="btn-secondary">Import .mdb</button>
-      <button class="btn-secondary" data-open-qbo="checks">Import QBO</button>
+      <button id="btn-new-check" class="btn-secondary" data-editor-only>+ New Check</button>
+      <button id="btn-import" class="btn-secondary" data-editor-only>Import .mdb</button>
+      <button class="btn-secondary" data-editor-only data-open-qbo="checks">Import QBO</button>
     </div>
   </div>
 
@@ -128,8 +128,8 @@
       </select>
     </div>
     <div class="toolbar-right">
-      <button id="btn-new-deposit" class="btn-secondary">+ New Deposit</button>
-      <button class="btn-secondary" data-open-qbo="deposits">Import QBO</button>
+      <button id="btn-new-deposit" class="btn-secondary" data-editor-only>+ New Deposit</button>
+      <button class="btn-secondary" data-editor-only data-open-qbo="deposits">Import QBO</button>
     </div>
   </div>
   <div class="table-wrap">
