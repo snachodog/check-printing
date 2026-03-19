@@ -114,6 +114,7 @@ app.delete('/api/account/:id', (req, res) => {
     // deposit_items deleted via ON DELETE CASCADE from deposits
     db.prepare('DELETE FROM deposits WHERE account_id = ?').run(req.params.id);
     db.prepare('DELETE FROM checks WHERE account_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM layout_fields WHERE account_id = ?').run(req.params.id);
     db.prepare('DELETE FROM account WHERE id = ?').run(req.params.id);
   })();
 
