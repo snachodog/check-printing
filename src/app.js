@@ -104,6 +104,22 @@ app.put('/api/account/:id/check-no', (req, res) => {
   res.json({ next_check_no: next });
 });
 
+// DELETE /api/account/:id - delete account and all associated data
+app.delete('/api/account/:id', (req, res) => {
+  const db = require('./db/database');
+  const account = db.prepare('SELECT id FROM account WHERE id = ?').get(req.params.id);
+  if (!account) return res.status(404).json({ error: 'Account not found.' });
+
+  db.transaction(() => {
+    // deposit_items deleted via ON DELETE CASCADE from deposits
+    db.prepare('DELETE FROM deposits WHERE account_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM checks WHERE account_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM account WHERE id = ?').run(req.params.id);
+  })();
+
+  res.status(204).end();
+});
+
 // POST /api/account/setup - create a new account (wizard)
 app.post('/api/account/setup', (req, res) => {
   const db = require('./db/database');
