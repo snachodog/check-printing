@@ -430,6 +430,8 @@ function renderRow(c) {
       })
     : '—';
 
+  const isEditor = state.user && (state.user.role === 'admin' || state.user.role === 'editor');
+
   const checkbox = isEditor
     ? `<td class="col-select"><input type="checkbox" data-id="${c.id}"${selected ? ' checked' : ''}></td>`
     : `<td class="col-select"></td>`;
@@ -437,8 +439,6 @@ function renderRow(c) {
   const statusBadge = printed
     ? '<span class="status-badge status-printed">Printed</span>'
     : '<span class="status-badge status-unprinted">Unprinted</span>';
-
-  const isEditor = state.user && (state.user.role === 'admin' || state.user.role === 'editor');
   const actions = isEditor
     ? `<button class="btn-sm btn-edit" data-id="${c.id}">Edit</button>` +
       `<button class="btn-sm btn-delete" data-id="${c.id}">Delete</button>`
