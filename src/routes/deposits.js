@@ -3,7 +3,7 @@
 const express = require('express');
 const router  = express.Router();
 const db      = require('../db/database');
-const { requireEditor, canAccessAccount } = require('../middleware/auth');
+const { canAccessAccount, isEditorForAccount } = require('../middleware/auth');
 
 // Helper: fetch deposit with items
 function getDepositWithItems(id) {
@@ -42,10 +42,13 @@ router.get('/:id', (req, res) => {
 });
 
 // POST /api/deposits
-router.post('/', requireEditor, (req, res) => {
+router.post('/', (req, res) => {
   const { account_id, deposit_date, currency, coin, cash_back, items } = req.body;
   if (!account_id) return res.status(400).json({ error: 'account_id is required.' });
   if (!deposit_date) return res.status(400).json({ error: 'deposit_date is required.' });
+  if (!isEditorForAccount(req.session, parseInt(account_id, 10))) {
+    return res.status(403).json({ error: 'Write access required.' });
+  }
 
   const insert = db.transaction(() => {
     const result = db.prepare(`
@@ -86,9 +89,12 @@ router.post('/', requireEditor, (req, res) => {
 });
 
 // PUT /api/deposits/:id
-router.put('/:id', requireEditor, (req, res) => {
-  const existing = db.prepare('SELECT id FROM deposits WHERE id = ?').get(req.params.id);
+router.put('/:id', (req, res) => {
+  const existing = db.prepare('SELECT id, account_id FROM deposits WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Deposit not found.' });
+  if (!isEditorForAccount(req.session, existing.account_id)) {
+    return res.status(403).json({ error: 'Write access required.' });
+  }
 
   const { deposit_date, currency, coin, cash_back, items } = req.body;
   if (!deposit_date) return res.status(400).json({ error: 'deposit_date is required.' });
@@ -129,16 +135,23 @@ router.put('/:id', requireEditor, (req, res) => {
 });
 
 // DELETE /api/deposits/:id
-router.delete('/:id', requireEditor, (req, res) => {
-  const existing = db.prepare('SELECT id FROM deposits WHERE id = ?').get(req.params.id);
+router.delete('/:id', (req, res) => {
+  const existing = db.prepare('SELECT id, account_id FROM deposits WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Deposit not found.' });
+  if (!isEditorForAccount(req.session, existing.account_id)) {
+    return res.status(403).json({ error: 'Write access required.' });
+  }
   // deposit_items deleted via ON DELETE CASCADE
   db.prepare('DELETE FROM deposits WHERE id = ?').run(req.params.id);
   res.status(204).end();
 });
 
 // PATCH /api/deposits/:id/mark-printed
-router.patch('/:id/mark-printed', requireEditor, (req, res) => {
+router.patch('/:id/mark-printed', (req, res) => {
+  const existing = db.prepare('SELECT account_id FROM deposits WHERE id = ?').get(req.params.id);
+  if (!existing || !isEditorForAccount(req.session, existing.account_id)) {
+    return res.status(403).json({ error: 'Write access required.' });
+  }
   db.prepare('UPDATE deposits SET printed = 1 WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });

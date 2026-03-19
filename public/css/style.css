@@ -421,6 +421,7 @@ td {
   transform: translate(-50%, -48%);
   width: 480px;
   max-width: calc(100vw - 2rem);
+  max-height: calc(100vh - 40px);
   background: var(--surface);
   border-radius: 6px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.2);
@@ -454,6 +455,9 @@ td {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .modal-desc {
@@ -597,6 +601,9 @@ input[type="file"] {
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 3px;
+}
+#acct-settings-modal {
+  width: min(620px, calc(100vw - 2rem));
 }
 #acct-settings-modal .modal-body {
   max-height: calc(100vh - 160px);

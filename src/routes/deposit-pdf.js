@@ -4,6 +4,7 @@ const express = require('express');
 const router  = express.Router();
 const db      = require('../db/database');
 const { generateDepositPdf } = require('../services/depositPdfService');
+const { isEditorForAccount } = require('../middleware/auth');
 
 // POST /api/deposit-pdf
 // Body: { depositId, type: 'slip' | 'report', mark_printed: true }
@@ -17,6 +18,9 @@ router.post('/', async (req, res) => {
 
   const deposit = db.prepare('SELECT * FROM deposits WHERE id = ?').get(depositId);
   if (!deposit) return res.status(404).json({ error: 'Deposit not found.' });
+  if (!isEditorForAccount(req.session, deposit.account_id)) {
+    return res.status(403).json({ error: 'Write access required.' });
+  }
 
   const account = db.prepare('SELECT * FROM account WHERE id = ?').get(deposit.account_id);
   if (!account) return res.status(404).json({ error: 'Account not found.' });

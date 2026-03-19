@@ -13,7 +13,8 @@ const state = {
   sortDir: 'desc',
   selected: new Set(),
   editingId: null,
-  user: null,   // { id, username, role }
+  user: null,        // { id, username, role }
+  accountRole: null, // 'editor' or 'viewer' for the current account
 };
 
 // ── API helpers ──────────────────────────────────────────────────────────────
@@ -128,7 +129,8 @@ async function logout() {
 function applyRoleUI() {
   const role = state.user ? state.user.role : 'viewer';
   const isAdmin  = role === 'admin';
-  const isEditor = role === 'admin' || role === 'editor';
+  // For editor-only elements, use per-account role when available
+  const isEditor = state.accountRole === 'editor' || (!state.accountRole && (role === 'admin' || role === 'editor'));
 
   document.getElementById('header-username').textContent = state.user ? state.user.username : '';
 
@@ -186,10 +188,11 @@ function renderUsersList() {
     ${users.map(u => {
       const isSelf = u.id === state.user.id;
       const accountsLabel = u.role === 'admin'
-        ? '<em style="color:var(--text-muted)">All accounts</em>'
-        : (u.accounts.length ? u.accounts.map(aid => {
-            const a = state.accounts.find(x => x.id === aid);
-            return escHtml(a ? (a.company1 || `Account ${a.id}`) : `#${aid}`);
+        ? '<em style="color:var(--text-muted)">All accounts (editor)</em>'
+        : (u.accounts.length ? u.accounts.map(ua => {
+            const a = state.accounts.find(x => x.id === ua.account_id);
+            const name = escHtml(a ? (a.company1 || `Account ${a.account_id}`) : `#${ua.account_id}`);
+            return `${name} <span style="font-size:10px;color:${ua.role === 'editor' ? '#16a34a' : '#6b7280'};font-weight:600;text-transform:uppercase">${ua.role}</span>`;
           }).join(', ') : '<em style="color:var(--text-muted)">None</em>');
       return `<tr>
         <td><strong>${escHtml(u.username)}</strong>${isSelf ? ' <em style="color:var(--text-muted)">(you)</em>' : ''}</td>
@@ -212,12 +215,19 @@ function renderUfAccountCheckboxes() {
   const currentAccounts = usersState.editingId
     ? (usersState.users.find(u => u.id === usersState.editingId) || {}).accounts || []
     : [];
-  container.innerHTML = state.accounts.map(a =>
-    `<label class="account-checkbox-label">
-      <input type="checkbox" name="uf-account" value="${a.id}"${currentAccounts.includes(a.id) ? ' checked' : ''}>
+  container.innerHTML = state.accounts.map(a => {
+    const assignment = currentAccounts.find(x => x.account_id === a.id);
+    const checked = !!assignment;
+    const acctRole = assignment ? assignment.role : 'viewer';
+    return `<label class="account-checkbox-label">
+      <input type="checkbox" name="uf-account" value="${a.id}"${checked ? ' checked' : ''}>
       ${escHtml(a.company1 || a.bank_name || `Account ${a.id}`)}
-    </label>`
-  ).join('');
+      <select name="uf-account-role" data-account-id="${a.id}" style="margin-left:6px;font-size:12px">
+        <option value="editor"${acctRole === 'editor' ? ' selected' : ''}>Editor</option>
+        <option value="viewer"${acctRole === 'viewer' ? ' selected' : ''}>Viewer</option>
+      </select>
+    </label>`;
+  }).join('');
 }
 
 function startUserEdit(userId) {
@@ -257,7 +267,11 @@ async function saveUser() {
   const password = document.getElementById('uf-password').value;
   const role     = document.getElementById('uf-role').value;
   const accounts = Array.from(document.querySelectorAll('input[name="uf-account"]:checked'))
-    .map(cb => parseInt(cb.value, 10));
+    .map(cb => {
+      const accountId = parseInt(cb.value, 10);
+      const roleSelect = document.querySelector(`select[name="uf-account-role"][data-account-id="${accountId}"]`);
+      return { id: accountId, role: roleSelect ? roleSelect.value : 'viewer' };
+    });
 
   if (!username) { errEl.textContent = 'Username required.'; errEl.hidden = false; return; }
   if (!usersState.editingId && !password) { errEl.textContent = 'Password required.'; errEl.hidden = false; return; }
@@ -340,6 +354,9 @@ async function loadAccounts() {
     localStorage.setItem('activeAccountId', state.activeAccountId);
 
     populateAccountSwitcher();
+    const activeAcct = state.accounts.find(a => a.id === state.activeAccountId);
+    state.accountRole = activeAcct ? activeAcct.user_role : null;
+    applyRoleUI();
     state.account = await apiFetch('GET', `/api/account/${state.activeAccountId}`);
     renderHeader();
     await loadChecks();
@@ -359,6 +376,9 @@ async function switchAccount(accountId) {
   state.activeAccountId = accountId;
   localStorage.setItem('activeAccountId', accountId);
   state.selected.clear();
+  const activeAcct = state.accounts.find(a => a.id === accountId);
+  state.accountRole = activeAcct ? activeAcct.user_role : null;
+  applyRoleUI();
   state.account = await apiFetch('GET', `/api/account/${accountId}`);
   renderHeader();
   await loadChecks();
@@ -430,7 +450,8 @@ function renderRow(c) {
       })
     : '—';
 
-  const isEditor = state.user && (state.user.role === 'admin' || state.user.role === 'editor');
+  const isEditor = state.accountRole === 'editor' ||
+    (!state.accountRole && state.user && (state.user.role === 'admin' || state.user.role === 'editor'));
 
   const checkbox = isEditor
     ? `<td class="col-select"><input type="checkbox" data-id="${c.id}"${selected ? ' checked' : ''}></td>`
