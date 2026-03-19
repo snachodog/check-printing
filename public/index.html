@@ -300,6 +300,10 @@
     <div class="modal-body">
       <form id="acct-settings-form" novalidate>
 
+        <div class="delete-account-row">
+          <button type="button" id="btn-delete-account" class="btn-danger">Delete Account</button>
+        </div>
+
         <p class="settings-section-label">Organization</p>
         <div class="form-group required">
           <label for="as-company1">Name</label>
@@ -410,6 +414,25 @@
     <div class="modal-footer">
       <button id="btn-confirm-set-check-no" class="btn-primary">Set Number</button>
       <button id="btn-cancel-set-check-no" class="btn-ghost">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Delete account confirmation modal -->
+  <div id="delete-account-overlay" class="modal-overlay"></div>
+  <div id="delete-account-modal" class="modal" role="dialog" aria-labelledby="delete-account-title">
+    <div class="modal-header">
+      <h2 id="delete-account-title">Delete Account</h2>
+      <button id="btn-close-delete-account" class="btn-icon" title="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="warning-box" style="background:#fef2f2;border-color:#f87171;color:#7f1d1d">
+        <strong>This cannot be undone.</strong> Deleting this account will permanently remove all checks, deposits, and account settings. There is no recovery.
+      </div>
+      <p style="margin-top:14px;font-size:13px">Are you sure you want to delete <strong id="delete-account-name"></strong>?</p>
+    </div>
+    <div class="modal-footer">
+      <button id="btn-confirm-delete-account" class="btn-danger">Yes, Delete Account</button>
+      <button id="btn-cancel-delete-account" class="btn-ghost">Cancel</button>
     </div>
   </div>
 

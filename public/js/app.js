@@ -644,6 +644,40 @@ async function saveAccountSettings() {
   }
 }
 
+// ── Delete account ────────────────────────────────────────────────────────────
+
+function openDeleteAccount() {
+  const name = (state.account && state.account.company1) || 'this account';
+  document.getElementById('delete-account-name').textContent = name;
+  document.getElementById('delete-account-overlay').classList.add('open');
+  document.getElementById('delete-account-modal').classList.add('open');
+}
+
+function closeDeleteAccount() {
+  document.getElementById('delete-account-overlay').classList.remove('open');
+  document.getElementById('delete-account-modal').classList.remove('open');
+}
+
+async function confirmDeleteAccount() {
+  const btn = document.getElementById('btn-confirm-delete-account');
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+  try {
+    await apiFetch('DELETE', `/api/account/${state.activeAccountId}`);
+    closeDeleteAccount();
+    closeAccountSettings();
+    state.account = null;
+    state.activeAccountId = null;
+    state.checks = [];
+    localStorage.removeItem('activeAccountId');
+    await loadAccounts(); // will open wizard if no accounts remain
+  } catch (err) {
+    alert('Delete failed: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = 'Yes, Delete Account';
+  }
+}
+
 // ── QBO Import ────────────────────────────────────────────────────────────────
 
 let qboChecksRecords = null;
@@ -1240,6 +1274,12 @@ function init() {
   document.getElementById('btn-cancel-acct-settings').addEventListener('click', closeAccountSettings);
   document.getElementById('acct-settings-overlay').addEventListener('click', closeAccountSettings);
   document.getElementById('btn-save-acct-settings').addEventListener('click', saveAccountSettings);
+
+  document.getElementById('btn-delete-account').addEventListener('click', openDeleteAccount);
+  document.getElementById('btn-close-delete-account').addEventListener('click', closeDeleteAccount);
+  document.getElementById('btn-cancel-delete-account').addEventListener('click', closeDeleteAccount);
+  document.getElementById('delete-account-overlay').addEventListener('click', closeDeleteAccount);
+  document.getElementById('btn-confirm-delete-account').addEventListener('click', confirmDeleteAccount);
 
   document.getElementById('btn-set-check-no').addEventListener('click', openSetCheckNo);
   document.getElementById('btn-close-set-check-no').addEventListener('click', closeSetCheckNo);
