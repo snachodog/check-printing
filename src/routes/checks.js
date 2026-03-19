@@ -3,11 +3,21 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/database');
+const { requireEditor, canAccessAccount } = require('../middleware/auth');
+
+// Helper: resolve account_id from a check id (for edit/delete access checks)
+function checkAccountId(checkId) {
+  const row = db.prepare('SELECT account_id FROM checks WHERE id = ?').get(checkId);
+  return row ? row.account_id : null;
+}
 
 // TODO: Add ledger reporting -- date range filter, payee search, total amount display, CSV export
 
 // GET /api/checks?account_id=X - list checks for an account, newest first
 router.get('/', (req, res) => {
+  if (!canAccessAccount(req.session, parseInt(req.query.account_id, 10))) {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
   const { after, printed, account_id } = req.query;
   if (!account_id) return res.status(400).json({ error: 'account_id query param required' });
 
@@ -36,8 +46,8 @@ router.get('/:id', (req, res) => {
 
 // TODO: Add payee address book -- store and recall payee name + address lines, autocomplete on new check form
 
-// POST /api/checks - create a new check
-router.post('/', (req, res) => {
+// POST /api/checks - create a new check (editor+)
+router.post('/', requireEditor, (req, res) => {
   const { account_id, payee, amount, check_date, memo, note1, note2,
           payee_address1, payee_address2, payee_address3, payee_address4 } = req.body;
 
@@ -75,8 +85,8 @@ router.post('/', (req, res) => {
   res.status(201).json(db.prepare('SELECT * FROM checks WHERE id = ?').get(newId));
 });
 
-// PUT /api/checks/:id - update a check
-router.put('/:id', (req, res) => {
+// PUT /api/checks/:id - update a check (editor+)
+router.put('/:id', requireEditor, (req, res) => {
   const check = db.prepare('SELECT * FROM checks WHERE id = ?').get(req.params.id);
   if (!check) return res.status(404).json({ error: 'Check not found' });
 
@@ -105,16 +115,16 @@ router.put('/:id', (req, res) => {
   res.json(db.prepare('SELECT * FROM checks WHERE id = ?').get(req.params.id));
 });
 
-// DELETE /api/checks/:id
-router.delete('/:id', (req, res) => {
+// DELETE /api/checks/:id (editor+)
+router.delete('/:id', requireEditor, (req, res) => {
   const check = db.prepare('SELECT * FROM checks WHERE id = ?').get(req.params.id);
   if (!check) return res.status(404).json({ error: 'Check not found' });
   db.prepare('DELETE FROM checks WHERE id = ?').run(req.params.id);
   res.status(204).send();
 });
 
-// POST /api/checks/mark-printed
-router.post('/mark-printed', (req, res) => {
+// POST /api/checks/mark-printed (editor+)
+router.post('/mark-printed', requireEditor, (req, res) => {
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
     return res.status(400).json({ error: 'ids array required' });

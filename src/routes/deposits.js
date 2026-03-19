@@ -3,6 +3,7 @@
 const express = require('express');
 const router  = express.Router();
 const db      = require('../db/database');
+const { requireEditor, canAccessAccount } = require('../middleware/auth');
 
 // Helper: fetch deposit with items
 function getDepositWithItems(id) {
@@ -18,6 +19,7 @@ function getDepositWithItems(id) {
 router.get('/', (req, res) => {
   const { account_id } = req.query;
   if (!account_id) return res.status(400).json({ error: 'account_id is required.' });
+  if (!canAccessAccount(req.session, parseInt(account_id, 10))) return res.status(403).json({ error: 'Access denied.' });
 
   const deposits = db.prepare(`
     SELECT d.*, COUNT(di.id) AS item_count,
@@ -40,7 +42,7 @@ router.get('/:id', (req, res) => {
 });
 
 // POST /api/deposits
-router.post('/', (req, res) => {
+router.post('/', requireEditor, (req, res) => {
   const { account_id, deposit_date, currency, coin, cash_back, items } = req.body;
   if (!account_id) return res.status(400).json({ error: 'account_id is required.' });
   if (!deposit_date) return res.status(400).json({ error: 'deposit_date is required.' });
@@ -84,7 +86,7 @@ router.post('/', (req, res) => {
 });
 
 // PUT /api/deposits/:id
-router.put('/:id', (req, res) => {
+router.put('/:id', requireEditor, (req, res) => {
   const existing = db.prepare('SELECT id FROM deposits WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Deposit not found.' });
 
@@ -127,7 +129,7 @@ router.put('/:id', (req, res) => {
 });
 
 // DELETE /api/deposits/:id
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requireEditor, (req, res) => {
   const existing = db.prepare('SELECT id FROM deposits WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Deposit not found.' });
   // deposit_items deleted via ON DELETE CASCADE
@@ -136,7 +138,7 @@ router.delete('/:id', (req, res) => {
 });
 
 // PATCH /api/deposits/:id/mark-printed
-router.patch('/:id/mark-printed', (req, res) => {
+router.patch('/:id/mark-printed', requireEditor, (req, res) => {
   db.prepare('UPDATE deposits SET printed = 1 WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });

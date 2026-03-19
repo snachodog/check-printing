@@ -42,6 +42,8 @@ header {
 .header-info { font-size: 12px; color: rgba(255,255,255,0.7); }
 .header-info strong { color: #fff; }
 .header-left { display: flex; align-items: center; gap: 10px; }
+.header-right { display: flex; align-items: center; gap: 10px; }
+.header-username { font-size: 12px; color: rgba(255,255,255,0.7); }
 
 .account-switcher {
   background: rgba(255,255,255,0.15);
@@ -760,3 +762,46 @@ input[type="file"] {
   flex-wrap: wrap;
 }
 .dep-pdf-btns { display: flex; gap: 6px; }
+
+/* ── Login overlay ── */
+.login-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--header-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+.login-overlay.hidden { display: none; }
+.login-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 32px;
+  width: 360px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+}
+.login-logo {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--header-bg);
+  margin-bottom: 20px;
+  letter-spacing: -0.5px;
+}
+.login-card h2 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+.login-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
+
+/* ── User management ── */
+.account-checkboxes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.account-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.account-checkbox-label:hover { border-color: var(--primary); }
