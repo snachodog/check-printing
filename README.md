@@ -20,9 +20,7 @@ docker compose pull
 docker compose up -d
 ```
 
-On first launch, the app detects no account is configured and opens a **setup wizard** in the browser. Fill in three steps — checkwriter info, bank info, and account/routing numbers — then start entering checks.
-
-If you have an existing ezCheckPrinting `.mdb` file, click **Import .mdb** instead.
+On first launch, the app detects no users are configured and opens a **setup wizard** in the browser. Create the first admin account, then configure checkwriter info, bank info, and account/routing numbers. If you have an existing ezCheckPrinting `.mdb` file, click **Import .mdb** instead.
 
 ### Development (local)
 
@@ -31,23 +29,23 @@ npm install
 npm run dev        # nodemon src/app.js
 ```
 
-## Importing from ezCheckPrinting (.mdb)
+## Authentication and user roles
 
-Two ways to import:
+All access requires login. The first run prompts you to create an admin account.
 
-**Via the UI (recommended):** Click **Import .mdb** in the toolbar, select the file, and click Import. The server runs the migration and shows the log output.
+Three roles are available:
 
-**Via CLI** (inside the container or locally with `mdbtools` installed):
+| Role | Access |
+|------|--------|
+| **admin** | Full access to all accounts; create/edit/delete users and accounts |
+| **editor** | Read and write access to assigned accounts |
+| **viewer** | Read-only access to assigned accounts |
 
-```bash
-docker exec -it check-printing node migrations/import-mdb.js \
-  --file "/app/data/YourAccount.mdb"
+Admins have editor access to all accounts automatically. Non-admin users are assigned per-account roles individually. User management is available in the **Users** panel (admin only). Any user can change their own password from the account menu.
 
-# Preview without writing:
-node migrations/import-mdb.js --file YourAccount.mdb --dry-run
-```
+## Multi-account support
 
-The script imports account config (T100), logo (Settings), check layout (T200), and check history (T104).
+The app supports multiple checking accounts in a single instance. Each account has its own check ledger, deposit records, and layout configuration. Admins can create, edit, and delete accounts. Deleting an account removes all associated checks, deposits, and layout data.
 
 ## Printing
 
@@ -57,6 +55,8 @@ The script imports account config (T100), logo (Settings), check layout (T200), 
 4. Print from the browser; checks are marked as printed in the ledger
 
 Use the **Reprint** button on printed checks to regenerate without re-marking them.
+
+Multi-page PDFs are supported when more than 3 checks are selected.
 
 ## Deposit slips
 
@@ -78,6 +78,36 @@ Switch to the **Deposits** tab in the toolbar to manage bank deposits.
 
 Generating a deposit slip marks the deposit as printed in the ledger.
 
+## Importing from QuickBooks Online (QBO CSV)
+
+Checks and deposits can be imported from a QuickBooks Online CSV export. Click **Import QBO CSV** in the toolbar, select the file, choose whether to import checks or deposits, and review the parsed records before confirming.
+
+The importer handles:
+
+- Standard QBO export column layouts (`Date`, `Transaction Type`, `Num`, `Name`, `Memo/Description`, `Amount`, `Debit`, `Credit`)
+- Automatic type filtering — checks are matched by transaction type `Check`, deposits by `Deposit`
+- Duplicate detection — existing check numbers are skipped
+- Auto-assignment of check numbers when the source CSV has no `Num` value
+- Grouping of deposit rows by date into individual deposit records
+
+## Importing from ezCheckPrinting (.mdb)
+
+Two ways to import:
+
+**Via the UI (recommended):** Click **Import .mdb** in the toolbar, select the file, and click Import. The server runs the migration and shows the log output.
+
+**Via CLI** (inside the container or locally with `mdbtools` installed):
+
+```bash
+docker exec -it check-printing node migrations/import-mdb.js \
+  --file "/app/data/YourAccount.mdb"
+
+# Preview without writing:
+node migrations/import-mdb.js --file YourAccount.mdb --dry-run
+```
+
+The script imports account config (T100), logo (Settings), check layout (T200), and check history (T104).
+
 ## Check layout
 
 - Page: 8.5" × 11", zero margins
@@ -85,12 +115,10 @@ Generating a deposit slip marks the deposit as printed in the ledger.
 - MICR line at 0.267" from bottom of each slot
 - MICR format: `A{routing}A {account}C {checkNo}A` (GnuMICR E-13B encoding)
 
-
 ## Environment variables
 
-The app has no required configuration. These are set in `docker-compose.yml`:
-
 | Variable | Default | Description |
-| -------- | ------- | ----------- |
+|----------|---------|-------------|
 | `PORT` | `3000` | HTTP port |
 | `DB_PATH` | `/app/data/check-printing.db` | SQLite database path |
+| `SESSION_SECRET` | *(random)* | Secret for signing session cookies — set explicitly in production |
