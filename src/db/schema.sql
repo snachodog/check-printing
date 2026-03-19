@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS user_accounts (
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   account_id INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  role       TEXT NOT NULL DEFAULT 'viewer' CHECK(role IN ('editor','viewer')),
   PRIMARY KEY (user_id, account_id)
 );
 

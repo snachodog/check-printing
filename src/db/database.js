@@ -99,6 +99,23 @@ if (!acctInfo.some(c => c.name === 'second_signature')) {
   db.exec('ALTER TABLE account ADD COLUMN second_signature INTEGER NOT NULL DEFAULT 0');
 }
 
+// Migration: add role column to user_accounts
+const uaInfo = db.prepare('PRAGMA table_info(user_accounts)').all();
+if (!uaInfo.some(c => c.name === 'role')) {
+  db.exec(`
+    ALTER TABLE user_accounts RENAME TO user_accounts_old;
+    CREATE TABLE user_accounts (
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      account_id INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+      role       TEXT NOT NULL DEFAULT 'viewer' CHECK(role IN ('editor','viewer')),
+      PRIMARY KEY (user_id, account_id)
+    );
+    INSERT INTO user_accounts (user_id, account_id, role)
+    SELECT user_id, account_id, 'editor' FROM user_accounts_old;
+    DROP TABLE user_accounts_old;
+  `);
+}
+
 // Create account_id indexes unconditionally (safe after migrations have run)
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_checks_account ON checks(account_id);

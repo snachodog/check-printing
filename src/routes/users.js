@@ -12,8 +12,7 @@ router.use(requireAuth, requireAdmin);
 function userWithAccounts(id) {
   const user = db.prepare('SELECT id, username, role, created_at FROM users WHERE id = ?').get(id);
   if (!user) return null;
-  user.accounts = db.prepare('SELECT account_id FROM user_accounts WHERE user_id = ?')
-    .all(id).map(r => r.account_id);
+  user.accounts = db.prepare('SELECT account_id, role FROM user_accounts WHERE user_id = ?').all(id);
   return user;
 }
 
@@ -21,8 +20,7 @@ function userWithAccounts(id) {
 router.get('/', (req, res) => {
   const users = db.prepare('SELECT id, username, role, created_at FROM users ORDER BY id ASC').all();
   users.forEach(u => {
-    u.accounts = db.prepare('SELECT account_id FROM user_accounts WHERE user_id = ?')
-      .all(u.id).map(r => r.account_id);
+    u.accounts = db.prepare('SELECT account_id, role FROM user_accounts WHERE user_id = ?').all(u.id);
   });
   res.json(users);
 });
@@ -48,8 +46,8 @@ router.post('/', async (req, res) => {
   }
 
   if (role !== 'admin' && Array.isArray(accounts) && accounts.length > 0) {
-    const stmt = db.prepare('INSERT OR IGNORE INTO user_accounts (user_id, account_id) VALUES (?, ?)');
-    accounts.forEach(aid => stmt.run(userId, aid));
+    const stmt = db.prepare('INSERT OR IGNORE INTO user_accounts (user_id, account_id, role) VALUES (?, ?, ?)');
+    accounts.forEach(a => stmt.run(userId, a.id, a.role === 'editor' ? 'editor' : 'viewer'));
   }
 
   res.status(201).json(userWithAccounts(userId));
@@ -92,8 +90,8 @@ router.put('/:id', async (req, res) => {
     db.prepare('DELETE FROM user_accounts WHERE user_id = ?').run(req.params.id);
     const effectiveRole = role || user.role;
     if (effectiveRole !== 'admin' && accounts.length > 0) {
-      const stmt = db.prepare('INSERT OR IGNORE INTO user_accounts (user_id, account_id) VALUES (?, ?)');
-      accounts.forEach(aid => stmt.run(req.params.id, aid));
+      const stmt = db.prepare('INSERT OR IGNORE INTO user_accounts (user_id, account_id, role) VALUES (?, ?, ?)');
+      accounts.forEach(a => stmt.run(req.params.id, a.id, a.role === 'editor' ? 'editor' : 'viewer'));
     }
   }
 

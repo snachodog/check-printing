@@ -10,7 +10,7 @@ const multer    = require('multer');
 const session   = require('express-session');
 
 const db     = require('./db/database');
-const { requireAuth, requireAdmin, requireEditor, canAccessAccount } = require('./middleware/auth');
+const { requireAuth, requireAdmin, canAccessAccount } = require('./middleware/auth');
 
 const app    = express();
 const upload = multer({ dest: os.tmpdir() });
@@ -44,15 +44,15 @@ app.use('/api/users', require('./routes/users'));
 // ── Check routes ──────────────────────────────────────────────────────────────
 app.use('/api/checks', require('./routes/checks'));
 
-// ── PDF (editor+) ─────────────────────────────────────────────────────────────
-app.use('/api/pdf', requireEditor, require('./routes/pdf'));
+// ── PDF (per-account editor check inside route) ───────────────────────────────
+app.use('/api/pdf', require('./routes/pdf'));
 
 // ── Deposits ──────────────────────────────────────────────────────────────────
 app.use('/api/deposits',    require('./routes/deposits'));
-app.use('/api/deposit-pdf', requireEditor, require('./routes/deposit-pdf'));
+app.use('/api/deposit-pdf', require('./routes/deposit-pdf'));
 
-// ── QBO import (editor+) ──────────────────────────────────────────────────────
-app.use('/api/qbo-import', requireEditor, require('./routes/qbo-import'));
+// ── QBO import (per-account editor check inside route) ────────────────────────
+app.use('/api/qbo-import', require('./routes/qbo-import'));
 
 // ── Accounts list — filtered by role ─────────────────────────────────────────
 app.get('/api/accounts', (req, res) => {
@@ -61,9 +61,11 @@ app.get('/api/accounts', (req, res) => {
     accounts = db.prepare(
       'SELECT id, company1, bank_name, current_check_no FROM account ORDER BY id ASC'
     ).all();
+    // Admins have editor access to all accounts
+    accounts.forEach(a => { a.user_role = 'editor'; });
   } else {
     accounts = db.prepare(`
-      SELECT a.id, a.company1, a.bank_name, a.current_check_no
+      SELECT a.id, a.company1, a.bank_name, a.current_check_no, ua.role AS user_role
       FROM account a
       JOIN user_accounts ua ON ua.account_id = a.id
       WHERE ua.user_id = ?

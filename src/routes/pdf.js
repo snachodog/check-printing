@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/database');
 const { generateCheckPdf } = require('../services/pdfService');
+const { isEditorForAccount } = require('../middleware/auth');
 
 /**
  * POST /api/pdf
@@ -18,6 +19,9 @@ router.post('/', async (req, res) => {
 
   if (!Array.isArray(checkIds) || checkIds.length === 0) {
     return res.status(400).json({ error: 'checkIds must be a non-empty array' });
+  }
+  if (!isEditorForAccount(req.session, parseInt(account_id, 10))) {
+    return res.status(403).json({ error: 'Write access required.' });
   }
 
   // Fetch checks in the order provided

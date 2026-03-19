@@ -3,7 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/database');
-const { requireEditor, canAccessAccount } = require('../middleware/auth');
+const { canAccessAccount, isEditorForAccount } = require('../middleware/auth');
 
 // Helper: resolve account_id from a check id (for edit/delete access checks)
 function checkAccountId(checkId) {
@@ -47,12 +47,15 @@ router.get('/:id', (req, res) => {
 // TODO: Add payee address book -- store and recall payee name + address lines, autocomplete on new check form
 
 // POST /api/checks - create a new check (editor+)
-router.post('/', requireEditor, (req, res) => {
+router.post('/', (req, res) => {
   const { account_id, payee, amount, check_date, memo, note1, note2,
           payee_address1, payee_address2, payee_address3, payee_address4 } = req.body;
 
   if (!account_id || !payee || !amount || !check_date) {
     return res.status(400).json({ error: 'account_id, payee, amount, and check_date are required' });
+  }
+  if (!isEditorForAccount(req.session, parseInt(account_id, 10))) {
+    return res.status(403).json({ error: 'Write access required.' });
   }
 
   const account = db.prepare('SELECT current_check_no FROM account WHERE id = ?').get(account_id);
@@ -86,9 +89,12 @@ router.post('/', requireEditor, (req, res) => {
 });
 
 // PUT /api/checks/:id - update a check (editor+)
-router.put('/:id', requireEditor, (req, res) => {
+router.put('/:id', (req, res) => {
   const check = db.prepare('SELECT * FROM checks WHERE id = ?').get(req.params.id);
   if (!check) return res.status(404).json({ error: 'Check not found' });
+  if (!isEditorForAccount(req.session, check.account_id)) {
+    return res.status(403).json({ error: 'Write access required.' });
+  }
 
   const { payee, amount, check_date, memo, note1, note2,
           payee_address1, payee_address2, payee_address3, payee_address4 } = req.body;
@@ -116,18 +122,26 @@ router.put('/:id', requireEditor, (req, res) => {
 });
 
 // DELETE /api/checks/:id (editor+)
-router.delete('/:id', requireEditor, (req, res) => {
+router.delete('/:id', (req, res) => {
   const check = db.prepare('SELECT * FROM checks WHERE id = ?').get(req.params.id);
   if (!check) return res.status(404).json({ error: 'Check not found' });
+  if (!isEditorForAccount(req.session, check.account_id)) {
+    return res.status(403).json({ error: 'Write access required.' });
+  }
   db.prepare('DELETE FROM checks WHERE id = ?').run(req.params.id);
   res.status(204).send();
 });
 
 // POST /api/checks/mark-printed (editor+)
-router.post('/mark-printed', requireEditor, (req, res) => {
+router.post('/mark-printed', (req, res) => {
   const { ids } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) {
     return res.status(400).json({ error: 'ids array required' });
+  }
+  // Verify editor access via the first check's account
+  const first = db.prepare('SELECT account_id FROM checks WHERE id = ?').get(ids[0]);
+  if (!first || !isEditorForAccount(req.session, first.account_id)) {
+    return res.status(403).json({ error: 'Write access required.' });
   }
   const placeholders = ids.map(() => '?').join(',');
   db.prepare(`UPDATE checks SET printed = 1 WHERE id IN (${placeholders})`).run(...ids);

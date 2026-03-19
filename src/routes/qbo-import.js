@@ -7,6 +7,7 @@ const os      = require('os');
 const fs      = require('fs');
 
 const upload = multer({ dest: os.tmpdir() });
+const { isEditorForAccount } = require('../middleware/auth');
 
 // ── CSV helpers ───────────────────────────────────────────────────────────────
 
@@ -290,6 +291,9 @@ router.post('/confirm', express.json(), (req, res) => {
   const { type, records, account_id } = req.body;
   if (!type || !records || !account_id) {
     return res.status(400).json({ error: 'Missing required fields: type, records, account_id.' });
+  }
+  if (!isEditorForAccount(req.session, parseInt(account_id, 10))) {
+    return res.status(403).json({ error: 'Write access required.' });
   }
   if (type !== 'checks' && type !== 'deposits') {
     return res.status(400).json({ error: 'Invalid type.' });

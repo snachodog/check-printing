@@ -34,6 +34,17 @@ function canAccessAccount(session, accountId) {
   return !!row;
 }
 
+// Returns true if the user has editor (write) access to the given account.
+// Admins always return true. Non-admins need user_accounts.role = 'editor'.
+function isEditorForAccount(session, accountId) {
+  if (!session || !session.userId) return false;
+  if (session.role === 'admin') return true;
+  const row = db.prepare(
+    "SELECT role FROM user_accounts WHERE user_id = ? AND account_id = ?"
+  ).get(session.userId, accountId);
+  return !!(row && row.role === 'editor');
+}
+
 // Middleware factory — resolves accountId via a callback on req, then checks access
 function requireAccountAccess(getAccountId) {
   return (req, res, next) => {
@@ -50,4 +61,4 @@ function requireAccountAccess(getAccountId) {
   };
 }
 
-module.exports = { requireAuth, requireAdmin, requireEditor, requireAccountAccess, canAccessAccount };
+module.exports = { requireAuth, requireAdmin, requireEditor, requireAccountAccess, canAccessAccount, isEditorForAccount };
