@@ -1,36 +1,80 @@
 'use strict';
 
-const express = require('express');
-const path = require('path');
-const fs = require('fs');
-const os = require('os');
+const express   = require('express');
+const path      = require('path');
+const fs        = require('fs');
+const os        = require('os');
+const crypto    = require('crypto');
 const { execFileSync } = require('child_process');
-const multer = require('multer');
+const multer    = require('multer');
+const session   = require('express-session');
 
-const app = express();
+const db     = require('./db/database');
+const { requireAuth, requireAdmin, requireEditor, canAccessAccount } = require('./middleware/auth');
+
+const app    = express();
 const upload = multer({ dest: os.tmpdir() });
 
-app.use(express.json());
+// ── Session store (SQLite-backed, no extra packages) ──────────────────────────
+const SessionStore = require('./lib/SessionStore');
+
+const SESSION_SECRET = process.env.SESSION_SECRET ||
+  (() => { console.warn('[warn] SESSION_SECRET not set — using random secret (sessions reset on restart)'); return crypto.randomBytes(32).toString('hex'); })();
+
+app.use(session({
+  store: new SessionStore(db),
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: { httpOnly: true, sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 }, // 7 days
+}));
+
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Routes
-app.use('/api/checks',      require('./routes/checks'));
-app.use('/api/pdf',         require('./routes/pdf'));
-app.use('/api/deposits',    require('./routes/deposits'));
-app.use('/api/deposit-pdf', require('./routes/deposit-pdf'));
+// ── Auth routes (public — no requireAuth) ─────────────────────────────────────
+app.use('/api/auth', require('./routes/auth'));
 
-// GET /api/accounts - list all accounts (id + display name)
+// ── All routes below require authentication ───────────────────────────────────
+app.use('/api', requireAuth);
+
+// ── User management (admin only) ──────────────────────────────────────────────
+app.use('/api/users', require('./routes/users'));
+
+// ── Check routes ──────────────────────────────────────────────────────────────
+app.use('/api/checks', require('./routes/checks'));
+
+// ── PDF (editor+) ─────────────────────────────────────────────────────────────
+app.use('/api/pdf', requireEditor, require('./routes/pdf'));
+
+// ── Deposits ──────────────────────────────────────────────────────────────────
+app.use('/api/deposits',    require('./routes/deposits'));
+app.use('/api/deposit-pdf', requireEditor, require('./routes/deposit-pdf'));
+
+// ── QBO import (editor+) ──────────────────────────────────────────────────────
+app.use('/api/qbo-import', requireEditor, require('./routes/qbo-import'));
+
+// ── Accounts list — filtered by role ─────────────────────────────────────────
 app.get('/api/accounts', (req, res) => {
-  const db = require('./db/database');
-  const accounts = db.prepare(
-    'SELECT id, company1, bank_name, current_check_no FROM account ORDER BY id ASC'
-  ).all();
+  let accounts;
+  if (req.session.role === 'admin') {
+    accounts = db.prepare(
+      'SELECT id, company1, bank_name, current_check_no FROM account ORDER BY id ASC'
+    ).all();
+  } else {
+    accounts = db.prepare(`
+      SELECT a.id, a.company1, a.bank_name, a.current_check_no
+      FROM account a
+      JOIN user_accounts ua ON ua.account_id = a.id
+      WHERE ua.user_id = ?
+      ORDER BY a.id ASC
+    `).all(req.session.userId);
+  }
   res.json(accounts);
 });
 
-// PUT /api/account/:id - update account settings
-app.put('/api/account/:id', (req, res) => {
-  const db = require('./db/database');
+// ── Account settings (admin only) ─────────────────────────────────────────────
+app.put('/api/account/:id', requireAdmin, (req, res) => {
   const account = db.prepare('SELECT id FROM account WHERE id = ?').get(req.params.id);
   if (!account) return res.status(404).json({ error: 'Account not found.' });
 
@@ -74,9 +118,11 @@ app.put('/api/account/:id', (req, res) => {
   ).get(req.params.id));
 });
 
-// GET /api/account/:id - get full account by id
+// GET /api/account/:id — any authenticated user with access
 app.get('/api/account/:id', (req, res) => {
-  const db = require('./db/database');
+  if (!canAccessAccount(req.session, parseInt(req.params.id, 10))) {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
   const account = db.prepare(
     'SELECT id, bank_name, bank_info1, bank_info2, bank_info3, transit_code, ' +
     'routing_number, account_number, current_check_no, ' +
@@ -86,9 +132,8 @@ app.get('/api/account/:id', (req, res) => {
   res.json(account);
 });
 
-// PUT /api/account/:id/check-no - override the next check number
-app.put('/api/account/:id/check-no', (req, res) => {
-  const db = require('./db/database');
+// PUT /api/account/:id/check-no (admin only)
+app.put('/api/account/:id/check-no', requireAdmin, (req, res) => {
   const account = db.prepare('SELECT id FROM account WHERE id = ?').get(req.params.id);
   if (!account) return res.status(404).json({ error: 'Account not found.' });
 
@@ -97,33 +142,30 @@ app.put('/api/account/:id/check-no', (req, res) => {
     return res.status(400).json({ error: 'Next check number must be a positive integer.' });
   }
 
-  // current_check_no is the last-used number; next check will be current_check_no + 1
   db.prepare("UPDATE account SET current_check_no = ?, updated_at = datetime('now') WHERE id = ?")
     .run(next - 1, req.params.id);
 
   res.json({ next_check_no: next });
 });
 
-// DELETE /api/account/:id - delete account and all associated data
-app.delete('/api/account/:id', (req, res) => {
-  const db = require('./db/database');
+// DELETE /api/account/:id (admin only)
+app.delete('/api/account/:id', requireAdmin, (req, res) => {
   const account = db.prepare('SELECT id FROM account WHERE id = ?').get(req.params.id);
   if (!account) return res.status(404).json({ error: 'Account not found.' });
 
   db.transaction(() => {
-    // deposit_items deleted via ON DELETE CASCADE from deposits
     db.prepare('DELETE FROM deposits WHERE account_id = ?').run(req.params.id);
     db.prepare('DELETE FROM checks WHERE account_id = ?').run(req.params.id);
     db.prepare('DELETE FROM layout_fields WHERE account_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM user_accounts WHERE account_id = ?').run(req.params.id);
     db.prepare('DELETE FROM account WHERE id = ?').run(req.params.id);
   })();
 
   res.status(204).end();
 });
 
-// POST /api/account/setup - create a new account (wizard)
-app.post('/api/account/setup', (req, res) => {
-  const db = require('./db/database');
+// POST /api/account/setup (admin only — creates a new checking account)
+app.post('/api/account/setup', requireAdmin, (req, res) => {
   const {
     company1, company2, company3, company4,
     bank_name, bank_info1, bank_info2, transit_code,
@@ -167,16 +209,9 @@ app.post('/api/account/setup', (req, res) => {
   res.status(201).json({ success: true, accountId: result.lastInsertRowid });
 });
 
-// TODO: Add basic auth or simple password gate for any network-exposed deployment
-
-// TODO: Add deposit slip support -- deposits table, PDF generation, ledger, and slide-in entry form
-
-app.use('/api/qbo-import', require('./routes/qbo-import'));
-
-// .mdb import endpoint — always creates a new account
-app.post('/api/import', upload.single('mdbfile'), (req, res) => {
+// .mdb import (admin only)
+app.post('/api/import', requireAdmin, upload.single('mdbfile'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
-  const db = require('./db/database');
   const tmpPath = req.file.path;
   try {
     const output = execFileSync(
@@ -184,7 +219,6 @@ app.post('/api/import', upload.single('mdbfile'), (req, res) => {
       [path.join(__dirname, '../migrations/import-mdb.js'), '--file', tmpPath],
       { encoding: 'utf8', timeout: 120000, env: process.env }
     );
-    // Grab the newly created account (highest id)
     const newAccount = db.prepare('SELECT id, company1 FROM account ORDER BY id DESC LIMIT 1').get();
     res.json({ success: true, log: output, newAccountId: newAccount ? newAccount.id : null });
   } catch (err) {
@@ -197,7 +231,7 @@ app.post('/api/import', upload.single('mdbfile'), (req, res) => {
   }
 });
 
-// Catch-all: serve index.html for client-side routing
+// Catch-all: serve index.html
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });

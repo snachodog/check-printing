@@ -7,13 +7,58 @@
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
+  <!-- Login overlay -->
+  <div id="login-overlay" class="login-overlay">
+    <div class="login-card" id="login-card">
+      <div class="login-logo">ezcheck</div>
+      <!-- First-run: create admin -->
+      <div id="login-setup-section" hidden>
+        <h2>Create Admin Account</h2>
+        <p class="login-sub">No users exist yet. Set up the first admin account.</p>
+        <div class="form-group">
+          <label for="setup-username">Username</label>
+          <input type="text" id="setup-username" autocomplete="username" autocapitalize="none">
+        </div>
+        <div class="form-group">
+          <label for="setup-password">Password <span class="field-hint">(min 8 characters)</span></label>
+          <input type="password" id="setup-password" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label for="setup-password2">Confirm Password</label>
+          <input type="password" id="setup-password2" autocomplete="new-password">
+        </div>
+        <div id="setup-error" class="wizard-error" hidden></div>
+        <button id="btn-setup-submit" class="btn-primary" style="width:100%;margin-top:8px">Create Admin &amp; Sign In</button>
+      </div>
+      <!-- Normal login -->
+      <div id="login-form-section" hidden>
+        <h2>Sign In</h2>
+        <div class="form-group">
+          <label for="login-username">Username</label>
+          <input type="text" id="login-username" autocomplete="username" autocapitalize="none">
+        </div>
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" autocomplete="current-password">
+        </div>
+        <div id="login-error" class="wizard-error" hidden></div>
+        <button id="btn-login-submit" class="btn-primary" style="width:100%;margin-top:8px">Sign In</button>
+      </div>
+    </div>
+  </div>
+
   <header>
     <div class="header-left">
       <span class="header-brand" id="company-name">ezcheck</span>
       <select id="account-switcher" class="account-switcher" title="Switch account"></select>
-      <button id="btn-account-settings" class="btn-header-icon" title="Account settings">⚙</button>
+      <button id="btn-account-settings" class="btn-header-icon" title="Account settings" data-admin-only>⚙</button>
     </div>
-    <span class="header-info">Next check: <strong id="current-check-no">—</strong><button id="btn-set-check-no" class="btn-header-inline" title="Set next check number">✎</button></span>
+    <div class="header-right">
+      <span class="header-info">Next check: <strong id="current-check-no">—</strong><button id="btn-set-check-no" class="btn-header-inline" title="Set next check number" data-admin-only>✎</button></span>
+      <button id="btn-users" class="btn-header-icon" title="Manage users" data-admin-only hidden>👥</button>
+      <span id="header-username" class="header-username"></span>
+      <button id="btn-logout" class="btn-header-icon" title="Sign out">↩</button>
+    </div>
   </header>
 
   <!-- View nav tabs -->
@@ -558,6 +603,69 @@
       </div>
     </div>
   </aside>
+
+  <!-- User management modal (admin only) -->
+  <div id="users-overlay" class="modal-overlay"></div>
+  <div id="users-modal" class="modal modal-wide" role="dialog" aria-labelledby="users-title">
+    <div class="modal-header">
+      <h2 id="users-title">Manage Users</h2>
+      <button id="btn-close-users" class="btn-icon" title="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <div id="users-list"></div>
+      <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
+        <h3 style="font-size:13px;font-weight:600;margin-bottom:10px" id="user-form-title">Add User</h3>
+        <div class="form-row">
+          <div class="form-group required">
+            <label for="uf-username">Username</label>
+            <input type="text" id="uf-username" autocapitalize="none">
+          </div>
+          <div class="form-group required">
+            <label for="uf-password">Password <span class="field-hint" id="uf-password-hint">(min 8 chars)</span></label>
+            <input type="password" id="uf-password" autocomplete="new-password">
+          </div>
+          <div class="form-group required">
+            <label for="uf-role">Role</label>
+            <select id="uf-role">
+              <option value="viewer">Viewer</option>
+              <option value="editor">Editor</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group" id="uf-accounts-group">
+          <label>Account Access <span class="field-hint">(admins see all — no selection needed)</span></label>
+          <div id="uf-accounts-checkboxes" class="account-checkboxes"></div>
+        </div>
+        <div id="user-form-error" class="wizard-error" hidden></div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="btn-save-user" class="btn-primary">Add User</button>
+          <button id="btn-cancel-user-edit" class="btn-ghost" hidden>Cancel</button>
+        </div>
+      </div>
+      <!-- Change own password -->
+      <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
+        <h3 style="font-size:13px;font-weight:600;margin-bottom:10px">Change My Password</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="cp-current">Current Password</label>
+            <input type="password" id="cp-current" autocomplete="current-password">
+          </div>
+          <div class="form-group">
+            <label for="cp-new">New Password <span class="field-hint">(min 8 chars)</span></label>
+            <input type="password" id="cp-new" autocomplete="new-password">
+          </div>
+          <div class="form-group">
+            <label for="cp-confirm">Confirm New</label>
+            <input type="password" id="cp-confirm" autocomplete="new-password">
+          </div>
+        </div>
+        <div id="cp-error" class="wizard-error" hidden></div>
+        <div id="cp-success" class="import-result" hidden>Password changed.</div>
+        <button id="btn-change-password" class="btn-secondary" style="margin-top:8px">Change Password</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/js/app.js"></script>
 </body>

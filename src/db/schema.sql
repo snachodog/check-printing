@@ -97,3 +97,25 @@ CREATE TABLE IF NOT EXISTS deposit_items (
 
 CREATE INDEX IF NOT EXISTS idx_deposits_account ON deposits(account_id);
 CREATE INDEX IF NOT EXISTS idx_deposit_items    ON deposit_items(deposit_id);
+
+CREATE TABLE IF NOT EXISTS users (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  username      TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  password_hash TEXT NOT NULL,
+  role          TEXT NOT NULL DEFAULT 'viewer' CHECK(role IN ('admin','editor','viewer')),
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS user_accounts (
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  account_id INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, account_id)
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  sid     TEXT PRIMARY KEY,
+  sess    TEXT NOT NULL,
+  expired INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_expired ON sessions(expired);

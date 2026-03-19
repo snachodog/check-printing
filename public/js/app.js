@@ -5,7 +5,7 @@ const state = {
   account: null,
   accounts: [],
   activeAccountId: parseInt(localStorage.getItem('activeAccountId'), 10) || null,
-  filterStatus: '',   // '' = all, '0' = unprinted, '1' = printed
+  filterStatus: '',
   filterPayee: '',
   filterDateFrom: '',
   filterDateTo: '',
@@ -13,6 +13,7 @@ const state = {
   sortDir: 'desc',
   selected: new Set(),
   editingId: null,
+  user: null,   // { id, username, role }
 };
 
 // ── API helpers ──────────────────────────────────────────────────────────────
@@ -21,10 +22,304 @@ async function apiFetch(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body !== undefined) opts.body = JSON.stringify(body);
   const res = await fetch(path, opts);
+  if (res.status === 401) { showLoginOverlay(); return null; }
   if (res.status === 204) return null;
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
+}
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+function showLoginOverlay() {
+  document.getElementById('login-overlay').classList.remove('hidden');
+}
+
+function hideLoginOverlay() {
+  document.getElementById('login-overlay').classList.add('hidden');
+}
+
+async function checkAuth() {
+  // Is there already a session?
+  const res = await fetch('/api/auth/me');
+  if (res.ok) {
+    state.user = await res.json();
+    hideLoginOverlay();
+    applyRoleUI();
+    return true;
+  }
+  // No session — check if this is first-run (no users at all)
+  const setup = await fetch('/api/auth/setup-needed');
+  const { setupNeeded } = await setup.json();
+  if (setupNeeded) {
+    document.getElementById('login-setup-section').hidden = false;
+    document.getElementById('login-form-section').hidden  = true;
+  } else {
+    document.getElementById('login-setup-section').hidden = true;
+    document.getElementById('login-form-section').hidden  = false;
+  }
+  showLoginOverlay();
+  return false;
+}
+
+async function submitLogin() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl    = document.getElementById('login-error');
+  const btn      = document.getElementById('btn-login-submit');
+  errEl.hidden   = true;
+  btn.disabled   = true;
+  btn.textContent = 'Signing in…';
+  try {
+    state.user = await apiFetch('POST', '/api/auth/login', { username, password });
+    if (!state.user) return; // 401 already handled by apiFetch
+    hideLoginOverlay();
+    applyRoleUI();
+    await loadAccounts();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.hidden = false;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+  }
+}
+
+async function submitSetup() {
+  const username  = document.getElementById('setup-username').value.trim();
+  const password  = document.getElementById('setup-password').value;
+  const password2 = document.getElementById('setup-password2').value;
+  const errEl     = document.getElementById('setup-error');
+  const btn       = document.getElementById('btn-setup-submit');
+  errEl.hidden    = true;
+  if (password !== password2) { errEl.textContent = 'Passwords do not match.'; errEl.hidden = false; return; }
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+  try {
+    state.user = await apiFetch('POST', '/api/auth/setup', { username, password });
+    hideLoginOverlay();
+    applyRoleUI();
+    await loadAccounts();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.hidden = false;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Create Admin & Sign In';
+  }
+}
+
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  state.user = null;
+  state.checks = [];
+  state.accounts = [];
+  state.account = null;
+  state.activeAccountId = null;
+  document.getElementById('login-username').value = '';
+  document.getElementById('login-password').value = '';
+  document.getElementById('login-error').hidden = true;
+  document.getElementById('login-setup-section').hidden = true;
+  document.getElementById('login-form-section').hidden  = false;
+  showLoginOverlay();
+}
+
+// Hide/show elements based on role
+function applyRoleUI() {
+  const role = state.user ? state.user.role : 'viewer';
+  const isAdmin  = role === 'admin';
+  const isEditor = role === 'admin' || role === 'editor';
+
+  document.getElementById('header-username').textContent = state.user ? state.user.username : '';
+
+  // Admin-only elements
+  document.querySelectorAll('[data-admin-only]').forEach(el => { el.hidden = !isAdmin; });
+
+  // Editor+ elements (hide for viewers)
+  document.querySelectorAll('[data-editor-only]').forEach(el => { el.hidden = !isEditor; });
+
+  // Users button (admin only)
+  document.getElementById('btn-users').hidden = !isAdmin;
+}
+
+// ── User management ────────────────────────────────────────────────────────────
+
+let usersState = { users: [], editingId: null };
+
+function openUsersModal() {
+  document.getElementById('user-form-error').hidden = true;
+  document.getElementById('users-overlay').classList.add('open');
+  document.getElementById('users-modal').classList.add('open');
+  loadUsers();
+  renderUfAccountCheckboxes();
+}
+
+function closeUsersModal() {
+  document.getElementById('users-overlay').classList.remove('open');
+  document.getElementById('users-modal').classList.remove('open');
+  cancelUserEdit();
+}
+
+async function loadUsers() {
+  try {
+    usersState.users = await apiFetch('GET', '/api/users');
+    renderUsersList();
+  } catch (err) {
+    document.getElementById('users-list').innerHTML =
+      `<p style="color:var(--danger)">${escHtml(err.message)}</p>`;
+  }
+}
+
+function roleBadge(role) {
+  const colors = { admin: '#2563eb', editor: '#16a34a', viewer: '#6b7280' };
+  return `<span style="background:${colors[role]};color:#fff;font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;text-transform:uppercase">${role}</span>`;
+}
+
+function renderUsersList() {
+  const el = document.getElementById('users-list');
+  const { users } = usersState;
+  if (!users.length) { el.innerHTML = '<p style="color:var(--text-muted)">No users.</p>'; return; }
+
+  el.innerHTML = `<table class="qbo-preview-table" style="width:100%">
+    <thead><tr><th>Username</th><th>Role</th><th>Account Access</th><th></th></tr></thead>
+    <tbody>
+    ${users.map(u => {
+      const isSelf = u.id === state.user.id;
+      const accountsLabel = u.role === 'admin'
+        ? '<em style="color:var(--text-muted)">All accounts</em>'
+        : (u.accounts.length ? u.accounts.map(aid => {
+            const a = state.accounts.find(x => x.id === aid);
+            return escHtml(a ? (a.company1 || `Account ${a.id}`) : `#${aid}`);
+          }).join(', ') : '<em style="color:var(--text-muted)">None</em>');
+      return `<tr>
+        <td><strong>${escHtml(u.username)}</strong>${isSelf ? ' <em style="color:var(--text-muted)">(you)</em>' : ''}</td>
+        <td>${roleBadge(u.role)}</td>
+        <td style="font-size:12px">${accountsLabel}</td>
+        <td style="white-space:nowrap">
+          <button class="btn-sm btn-secondary" onclick="startUserEdit(${u.id})">Edit</button>
+          ${!isSelf ? `<button class="btn-sm btn-danger" style="margin-left:4px" onclick="deleteUser(${u.id})">Delete</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>`;
+}
+
+function renderUfAccountCheckboxes() {
+  const role = document.getElementById('uf-role').value;
+  const group = document.getElementById('uf-accounts-group');
+  group.hidden = role === 'admin';
+  const container = document.getElementById('uf-accounts-checkboxes');
+  const currentAccounts = usersState.editingId
+    ? (usersState.users.find(u => u.id === usersState.editingId) || {}).accounts || []
+    : [];
+  container.innerHTML = state.accounts.map(a =>
+    `<label class="account-checkbox-label">
+      <input type="checkbox" name="uf-account" value="${a.id}"${currentAccounts.includes(a.id) ? ' checked' : ''}>
+      ${escHtml(a.company1 || a.bank_name || `Account ${a.id}`)}
+    </label>`
+  ).join('');
+}
+
+function startUserEdit(userId) {
+  const u = usersState.users.find(x => x.id === userId);
+  if (!u) return;
+  usersState.editingId = userId;
+  document.getElementById('user-form-title').textContent = `Edit User: ${u.username}`;
+  document.getElementById('uf-username').value  = u.username;
+  document.getElementById('uf-password').value  = '';
+  document.getElementById('uf-password-hint').textContent = '(leave blank to keep)';
+  document.getElementById('uf-role').value       = u.role;
+  document.getElementById('btn-save-user').textContent   = 'Save Changes';
+  document.getElementById('btn-cancel-user-edit').hidden = false;
+  document.getElementById('user-form-error').hidden = true;
+  renderUfAccountCheckboxes();
+  document.getElementById('uf-username').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function cancelUserEdit() {
+  usersState.editingId = null;
+  document.getElementById('user-form-title').textContent    = 'Add User';
+  document.getElementById('uf-username').value  = '';
+  document.getElementById('uf-password').value  = '';
+  document.getElementById('uf-password-hint').textContent = '(min 8 chars)';
+  document.getElementById('uf-role').value       = 'viewer';
+  document.getElementById('btn-save-user').textContent     = 'Add User';
+  document.getElementById('btn-cancel-user-edit').hidden   = true;
+  document.getElementById('user-form-error').hidden = true;
+  renderUfAccountCheckboxes();
+}
+
+async function saveUser() {
+  const errEl    = document.getElementById('user-form-error');
+  const btn      = document.getElementById('btn-save-user');
+  errEl.hidden   = true;
+  const username = document.getElementById('uf-username').value.trim();
+  const password = document.getElementById('uf-password').value;
+  const role     = document.getElementById('uf-role').value;
+  const accounts = Array.from(document.querySelectorAll('input[name="uf-account"]:checked'))
+    .map(cb => parseInt(cb.value, 10));
+
+  if (!username) { errEl.textContent = 'Username required.'; errEl.hidden = false; return; }
+  if (!usersState.editingId && !password) { errEl.textContent = 'Password required.'; errEl.hidden = false; return; }
+
+  btn.disabled = true;
+  const origText = btn.textContent;
+  btn.textContent = 'Saving…';
+  try {
+    const body = { username, role, accounts };
+    if (password) body.password = password;
+    if (usersState.editingId) {
+      await apiFetch('PUT', `/api/users/${usersState.editingId}`, body);
+    } else {
+      await apiFetch('POST', '/api/users', body);
+    }
+    cancelUserEdit();
+    await loadUsers();
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.hidden = false;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
+}
+
+async function deleteUser(userId) {
+  const u = usersState.users.find(x => x.id === userId);
+  if (!u) return;
+  if (!confirm(`Delete user "${u.username}"? This cannot be undone.`)) return;
+  try {
+    await apiFetch('DELETE', `/api/users/${userId}`);
+    if (usersState.editingId === userId) cancelUserEdit();
+    await loadUsers();
+  } catch (err) {
+    alert('Delete failed: ' + err.message);
+  }
+}
+
+async function changeOwnPassword() {
+  const errEl   = document.getElementById('cp-error');
+  const successEl = document.getElementById('cp-success');
+  const btn     = document.getElementById('btn-change-password');
+  errEl.hidden    = true;
+  successEl.hidden = true;
+  const current = document.getElementById('cp-current').value;
+  const next    = document.getElementById('cp-new').value;
+  const confirm2 = document.getElementById('cp-confirm').value;
+  if (next !== confirm2) { errEl.textContent = 'New passwords do not match.'; errEl.hidden = false; return; }
+  btn.disabled = true;
+  try {
+    await apiFetch('POST', '/api/auth/change-password', { current_password: current, new_password: next });
+    document.getElementById('cp-current').value = '';
+    document.getElementById('cp-new').value     = '';
+    document.getElementById('cp-confirm').value  = '';
+    successEl.hidden = false;
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.hidden = false;
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ── Data loading ─────────────────────────────────────────────────────────────
@@ -32,8 +327,10 @@ async function apiFetch(method, path, body) {
 async function loadAccounts() {
   try {
     state.accounts = await apiFetch('GET', '/api/accounts');
+    if (!state.accounts) return; // 401 redirect handled by apiFetch
     if (state.accounts.length === 0) {
-      openWizard();
+      // Only admins can create accounts; non-admins just see an empty state
+      if (state.user && state.user.role === 'admin') openWizard();
       return;
     }
     // Use stored account or default to first
@@ -133,14 +430,19 @@ function renderRow(c) {
       })
     : '—';
 
-  const checkbox = `<td class="col-select"><input type="checkbox" data-id="${c.id}"${selected ? ' checked' : ''}></td>`;
+  const checkbox = isEditor
+    ? `<td class="col-select"><input type="checkbox" data-id="${c.id}"${selected ? ' checked' : ''}></td>`
+    : `<td class="col-select"></td>`;
 
   const statusBadge = printed
     ? '<span class="status-badge status-printed">Printed</span>'
     : '<span class="status-badge status-unprinted">Unprinted</span>';
 
-  const actions = `<button class="btn-sm btn-edit" data-id="${c.id}">Edit</button>` +
-                  `<button class="btn-sm btn-delete" data-id="${c.id}">Delete</button>`;
+  const isEditor = state.user && (state.user.role === 'admin' || state.user.role === 'editor');
+  const actions = isEditor
+    ? `<button class="btn-sm btn-edit" data-id="${c.id}">Edit</button>` +
+      `<button class="btn-sm btn-delete" data-id="${c.id}">Delete</button>`
+    : '';
 
   return `<tr class="${printed ? 'printed' : ''}">
     ${checkbox}
@@ -1180,7 +1482,7 @@ function escHtml(str) {
 
 // ── Initialization ───────────────────────────────────────────────────────────
 
-function init() {
+async function init() {
   // Column sort
   document.querySelectorAll('thead th.sortable').forEach(th => {
     th.addEventListener('click', () => {
@@ -1354,8 +1656,25 @@ function init() {
   document.getElementById('btn-qbo-checks-cancel').addEventListener('click', closeQboImport);
   document.getElementById('btn-qbo-deposits-cancel').addEventListener('click', closeQboImport);
 
-  // Initial data load
-  loadAccounts();
+  // Auth event listeners
+  document.getElementById('btn-login-submit').addEventListener('click', submitLogin);
+  document.getElementById('btn-setup-submit').addEventListener('click', submitSetup);
+  document.getElementById('btn-logout').addEventListener('click', logout);
+  document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') submitLogin(); });
+  document.getElementById('setup-password2').addEventListener('keydown', e => { if (e.key === 'Enter') submitSetup(); });
+
+  // User management
+  document.getElementById('btn-users').addEventListener('click', openUsersModal);
+  document.getElementById('btn-close-users').addEventListener('click', closeUsersModal);
+  document.getElementById('users-overlay').addEventListener('click', closeUsersModal);
+  document.getElementById('btn-save-user').addEventListener('click', saveUser);
+  document.getElementById('btn-cancel-user-edit').addEventListener('click', cancelUserEdit);
+  document.getElementById('uf-role').addEventListener('change', renderUfAccountCheckboxes);
+  document.getElementById('btn-change-password').addEventListener('click', changeOwnPassword);
+
+  // Initial auth check → loads app if already signed in
+  const authed = await checkAuth();
+  if (authed) await loadAccounts();
 }
 
 document.addEventListener('DOMContentLoaded', init);
