@@ -138,12 +138,21 @@ router.post('/mark-printed', (req, res) => {
   if (!Array.isArray(ids) || ids.length === 0) {
     return res.status(400).json({ error: 'ids array required' });
   }
-  // Verify editor access via the first check's account
-  const first = db.prepare('SELECT account_id FROM checks WHERE id = ?').get(ids[0]);
-  if (!first || !isEditorForAccount(req.session, first.account_id)) {
+
+  // Fetch all checks and verify they all exist and belong to the same account
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = db.prepare(`SELECT id, account_id FROM checks WHERE id IN (${placeholders})`).all(...ids);
+  if (rows.length !== ids.length) {
+    return res.status(404).json({ error: 'One or more checks not found.' });
+  }
+  const accountIds = [...new Set(rows.map(r => r.account_id))];
+  if (accountIds.length > 1) {
+    return res.status(400).json({ error: 'All checks must belong to the same account.' });
+  }
+  if (!isEditorForAccount(req.session, accountIds[0])) {
     return res.status(403).json({ error: 'Write access required.' });
   }
-  const placeholders = ids.map(() => '?').join(',');
+
   db.prepare(`UPDATE checks SET printed = 1 WHERE id IN (${placeholders})`).run(...ids);
   res.json({ updated: ids.length });
 });
