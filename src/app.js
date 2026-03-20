@@ -18,12 +18,11 @@ const upload = multer({ dest: os.tmpdir() });
 // ── Session store (SQLite-backed, no extra packages) ──────────────────────────
 const SessionStore = require('./lib/SessionStore');
 
-if (!process.env.SESSION_SECRET && process.env.NODE_ENV === 'production') {
-  console.error('[fatal] SESSION_SECRET environment variable must be set in production. Exiting.');
+if (!process.env.SESSION_SECRET) {
+  console.error('[fatal] SESSION_SECRET environment variable is not set. See .env.example. Exiting.');
   process.exit(1);
 }
-const SESSION_SECRET = process.env.SESSION_SECRET ||
-  (() => { console.warn('[warn] SESSION_SECRET not set — using random secret (sessions will reset on restart)'); return crypto.randomBytes(32).toString('hex'); })();
+const SESSION_SECRET = process.env.SESSION_SECRET;
 
 const SESSION_MAX_AGE_MS = (parseInt(process.env.SESSION_MAX_AGE_HOURS, 10) || 168) * 60 * 60 * 1000;
 
