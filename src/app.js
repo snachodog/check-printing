@@ -18,16 +18,28 @@ const upload = multer({ dest: os.tmpdir() });
 // ── Session store (SQLite-backed, no extra packages) ──────────────────────────
 const SessionStore = require('./lib/SessionStore');
 
+if (!process.env.SESSION_SECRET && process.env.NODE_ENV === 'production') {
+  console.error('[fatal] SESSION_SECRET environment variable must be set in production. Exiting.');
+  process.exit(1);
+}
 const SESSION_SECRET = process.env.SESSION_SECRET ||
-  (() => { console.warn('[warn] SESSION_SECRET not set — using random secret (sessions reset on restart)'); return crypto.randomBytes(32).toString('hex'); })();
+  (() => { console.warn('[warn] SESSION_SECRET not set — using random secret (sessions will reset on restart)'); return crypto.randomBytes(32).toString('hex'); })();
 
 app.use(session({
   store: new SessionStore(db),
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 }, // 7 days
+  cookie: { httpOnly: true, sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 }, // 7 days
 }));
+
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  next();
+});
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '../public')));
@@ -91,6 +103,10 @@ app.put('/api/account/:id', requireAdmin, (req, res) => {
   if (!company1 || !routing_number || !account_number) {
     return res.status(400).json({ error: 'Organization name, routing number, and account number are required.' });
   }
+  const MAX_IMAGE_BYTES = 512 * 1024; // 512 KB base64 limit
+  if (logo_data && Buffer.byteLength(logo_data, 'utf8') > MAX_IMAGE_BYTES) {
+    return res.status(400).json({ error: 'Logo image must be smaller than 512 KB.' });
+  }
 
   db.prepare(`
     UPDATE account SET
@@ -121,15 +137,16 @@ app.put('/api/account/:id', requireAdmin, (req, res) => {
 });
 
 // GET /api/account/:id — any authenticated user with access
+// Routing/account numbers are only returned to admins (non-admins don't need them client-side)
 app.get('/api/account/:id', (req, res) => {
   if (!canAccessAccount(req.session, parseInt(req.params.id, 10))) {
     return res.status(403).json({ error: 'Access denied.' });
   }
-  const account = db.prepare(
-    'SELECT id, bank_name, bank_info1, bank_info2, bank_info3, transit_code, ' +
-    'routing_number, account_number, current_check_no, ' +
-    'company1, company2, company3, company4, check_position, second_signature FROM account WHERE id = ?'
-  ).get(req.params.id);
+  const isAdmin = req.session.role === 'admin';
+  const cols = isAdmin
+    ? 'id, bank_name, bank_info1, bank_info2, bank_info3, transit_code, routing_number, account_number, current_check_no, company1, company2, company3, company4, check_position, second_signature'
+    : 'id, bank_name, bank_info1, bank_info2, bank_info3, transit_code, current_check_no, company1, company2, company3, company4, check_position, second_signature';
+  const account = db.prepare(`SELECT ${cols} FROM account WHERE id = ?`).get(req.params.id);
   if (!account) return res.status(404).json({ error: 'Account not found.' });
   res.json(account);
 });

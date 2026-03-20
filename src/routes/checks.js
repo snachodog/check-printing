@@ -54,6 +54,10 @@ router.post('/', (req, res) => {
   if (!account_id || !payee || !amount || !check_date) {
     return res.status(400).json({ error: 'account_id, payee, amount, and check_date are required' });
   }
+  const parsedAmount = parseFloat(amount);
+  if (!isFinite(parsedAmount) || parsedAmount <= 0) {
+    return res.status(400).json({ error: 'Amount must be a positive number.' });
+  }
   if (!isEditorForAccount(req.session, parseInt(account_id, 10))) {
     return res.status(403).json({ error: 'Write access required.' });
   }
@@ -75,7 +79,7 @@ router.post('/', (req, res) => {
 
   const transaction = db.transaction(() => {
     const result = insertCheck.run(
-      account_id, checkNo, payee, parseFloat(amount), check_date,
+      account_id, checkNo, payee, parsedAmount, check_date,
       memo || null, note1 || null, note2 || null,
       payee_address1 || null, payee_address2 || null,
       payee_address3 || null, payee_address4 || null
@@ -99,6 +103,14 @@ router.put('/:id', (req, res) => {
   const { payee, amount, check_date, memo, note1, note2,
           payee_address1, payee_address2, payee_address3, payee_address4 } = req.body;
 
+  let parsedAmount = check.amount;
+  if (amount !== undefined) {
+    parsedAmount = parseFloat(amount);
+    if (!isFinite(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({ error: 'Amount must be a positive number.' });
+    }
+  }
+
   db.prepare(`
     UPDATE checks SET
       payee = ?, amount = ?, check_date = ?, memo = ?, note1 = ?, note2 = ?,
@@ -106,7 +118,7 @@ router.put('/:id', (req, res) => {
     WHERE id = ?
   `).run(
     payee ?? check.payee,
-    amount !== undefined ? parseFloat(amount) : check.amount,
+    parsedAmount,
     check_date ?? check.check_date,
     memo ?? check.memo,
     note1 ?? check.note1,

@@ -12,6 +12,8 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - DB_PATH=/app/data/check-printing.db
+      # Required in production — generate with: openssl rand -hex 32
+      - SESSION_SECRET=${SESSION_SECRET}
 
 volumes:
   check-printing-data:
