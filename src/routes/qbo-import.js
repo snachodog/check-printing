@@ -309,6 +309,9 @@ router.post('/confirm', express.json(), (req, res) => {
   if (!Array.isArray(records) || records.length === 0) {
     return res.status(400).json({ error: 'No records provided.' });
   }
+  if (records.length > 1000) {
+    return res.status(400).json({ error: 'Cannot import more than 1000 records at a time.' });
+  }
 
   const db = require('../db/database');
   try {

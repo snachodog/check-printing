@@ -17,8 +17,12 @@ const { isEditorForAccount } = require('../middleware/auth');
 router.post('/', async (req, res) => {
   const { checkIds, account_id } = req.body;
 
+  const MAX_CHECKS_PER_JOB = 300; // 100 pages × 3 checks per page
   if (!Array.isArray(checkIds) || checkIds.length === 0) {
     return res.status(400).json({ error: 'checkIds must be a non-empty array' });
+  }
+  if (checkIds.length > MAX_CHECKS_PER_JOB) {
+    return res.status(400).json({ error: `Cannot generate more than ${MAX_CHECKS_PER_JOB} checks per PDF job.` });
   }
   const resolvedAccountId = parseInt(account_id, 10);
   if (!isEditorForAccount(req.session, resolvedAccountId)) {
@@ -62,7 +66,7 @@ router.post('/', async (req, res) => {
     res.send(pdfBuffer);
   } catch (err) {
     console.error('PDF generation error:', err);
-    res.status(500).json({ error: 'PDF generation failed', detail: err.message });
+    res.status(500).json({ error: 'PDF generation failed.' });
   }
 });
 

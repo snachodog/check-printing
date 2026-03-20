@@ -38,6 +38,9 @@ router.get('/', (req, res) => {
 router.get('/:id', (req, res) => {
   const deposit = getDepositWithItems(req.params.id);
   if (!deposit) return res.status(404).json({ error: 'Deposit not found.' });
+  if (!canAccessAccount(req.session, deposit.account_id)) {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
   res.json(deposit);
 });
 
