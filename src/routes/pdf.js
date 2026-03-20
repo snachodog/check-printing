@@ -20,24 +20,23 @@ router.post('/', async (req, res) => {
   if (!Array.isArray(checkIds) || checkIds.length === 0) {
     return res.status(400).json({ error: 'checkIds must be a non-empty array' });
   }
-  if (!isEditorForAccount(req.session, parseInt(account_id, 10))) {
+  const resolvedAccountId = parseInt(account_id, 10);
+  if (!isEditorForAccount(req.session, resolvedAccountId)) {
     return res.status(403).json({ error: 'Write access required.' });
   }
 
-  // Fetch checks in the order provided
+  // Fetch checks in the order provided; verify each belongs to the declared account
   let checks;
   try {
     checks = checkIds.map(id => {
       const check = db.prepare('SELECT * FROM checks WHERE id = ?').get(id);
       if (!check) throw new Error(`Check ID ${id} not found`);
+      if (check.account_id !== resolvedAccountId) throw new Error(`Check ID ${id} does not belong to this account`);
       return check;
     });
   } catch (err) {
     return res.status(404).json({ error: err.message });
   }
-
-  // Derive account from checks (all should belong to the same account)
-  const resolvedAccountId = account_id || checks[0].account_id;
   const account = db.prepare('SELECT * FROM account WHERE id = ?').get(resolvedAccountId);
   if (!account) {
     return res.status(500).json({ error: 'No account configured.' });

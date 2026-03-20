@@ -95,6 +95,13 @@ router.put('/:id', async (req, res) => {
     }
   }
 
+  // If role or account assignments changed, invalidate all active sessions for this user
+  // so the new permissions take effect immediately rather than at session expiry.
+  if (role || Array.isArray(accounts)) {
+    db.prepare("DELETE FROM sessions WHERE CAST(json_extract(sess, '$.userId') AS INTEGER) = ?")
+      .run(parseInt(req.params.id, 10));
+  }
+
   res.json(userWithAccounts(req.params.id));
 });
 
