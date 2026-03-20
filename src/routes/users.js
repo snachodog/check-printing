@@ -5,6 +5,7 @@ const router  = express.Router();
 const bcrypt  = require('bcryptjs');
 const db      = require('../db/database');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { validatePassword } = require('./auth');
 
 // All /api/users routes require admin
 router.use(requireAuth, requireAdmin);
@@ -30,7 +31,8 @@ router.post('/', async (req, res) => {
   const { username, password, role, accounts } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required.' });
   if (!['admin', 'editor', 'viewer'].includes(role)) return res.status(400).json({ error: 'Invalid role.' });
-  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  const pwErr = validatePassword(password);
+  if (pwErr) return res.status(400).json({ error: pwErr });
 
   const hash = await bcrypt.hash(password, 12);
 
@@ -80,7 +82,8 @@ router.put('/:id', async (req, res) => {
   }
 
   if (password) {
-    if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+    const pwErr = validatePassword(password);
+    if (pwErr) return res.status(400).json({ error: pwErr });
     const hash = await bcrypt.hash(password, 12);
     db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?")
       .run(hash, req.params.id);

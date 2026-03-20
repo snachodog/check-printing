@@ -5,6 +5,15 @@ const router  = express.Router();
 const bcrypt  = require('bcryptjs');
 const db      = require('../db/database');
 
+// ── Password validation ───────────────────────────────────────────────────────
+// Returns an error string if invalid, or null if acceptable.
+function validatePassword(password) {
+  if (!password || password.length < 10) return 'Password must be at least 10 characters.';
+  if (!/[a-zA-Z]/.test(password))        return 'Password must contain at least one letter.';
+  if (!/[^a-zA-Z]/.test(password))       return 'Password must contain at least one digit or symbol.';
+  return null;
+}
+
 // ── Login rate limiter ────────────────────────────────────────────────────────
 // Tracks failed login attempts per IP. After 10 failures within 15 minutes,
 // further attempts are blocked until the window resets.
@@ -57,7 +66,8 @@ router.post('/setup', async (req, res) => {
 
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required.' });
-  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  const pwErr = validatePassword(password);
+  if (pwErr) return res.status(400).json({ error: pwErr });
 
   const hash = await bcrypt.hash(password, 12);
   const result = db.prepare(
@@ -121,7 +131,8 @@ router.post('/change-password', async (req, res) => {
 
   const { current_password, new_password } = req.body;
   if (!current_password || !new_password) return res.status(400).json({ error: 'Both fields required.' });
-  if (new_password.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters.' });
+  const pwErr = validatePassword(new_password);
+  if (pwErr) return res.status(400).json({ error: pwErr });
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.userId);
   const match = await bcrypt.compare(current_password, user.password_hash);
@@ -135,3 +146,4 @@ router.post('/change-password', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.validatePassword = validatePassword;

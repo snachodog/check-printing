@@ -25,12 +25,14 @@ if (!process.env.SESSION_SECRET && process.env.NODE_ENV === 'production') {
 const SESSION_SECRET = process.env.SESSION_SECRET ||
   (() => { console.warn('[warn] SESSION_SECRET not set — using random secret (sessions will reset on restart)'); return crypto.randomBytes(32).toString('hex'); })();
 
+const SESSION_MAX_AGE_MS = (parseInt(process.env.SESSION_MAX_AGE_HOURS, 10) || 168) * 60 * 60 * 1000;
+
 app.use(session({
   store: new SessionStore(db),
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000 }, // 7 days
+  cookie: { httpOnly: true, sameSite: 'strict', maxAge: SESSION_MAX_AGE_MS },
 }));
 
 // Security headers
@@ -38,10 +40,14 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'same-origin');
+  // style-src unsafe-inline: required for inline style= attrs in JS-generated HTML
+  // img-src data: required for base64-embedded logos and signatures
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'");
   next();
 });
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '2mb' }));
 app.use(express.static(path.join(__dirname, '../public')));
 
 // ── Auth routes (public — no requireAuth) ─────────────────────────────────────
