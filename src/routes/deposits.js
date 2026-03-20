@@ -49,6 +49,14 @@ router.post('/', (req, res) => {
   if (!isEditorForAccount(req.session, parseInt(account_id, 10))) {
     return res.status(403).json({ error: 'Write access required.' });
   }
+  if (Array.isArray(items)) {
+    for (const item of items) {
+      const a = parseFloat(item.amount);
+      if (!isFinite(a) || a <= 0) {
+        return res.status(400).json({ error: 'Each deposit item amount must be a positive number.' });
+      }
+    }
+  }
 
   const insert = db.transaction(() => {
     const result = db.prepare(`
@@ -76,7 +84,7 @@ router.post('/', (req, res) => {
           item.bank_no  || null,
           item.payee    || null,
           item.memo     || null,
-          parseFloat(item.amount) || 0,
+          parseFloat(item.amount),
         );
       });
     }
@@ -98,6 +106,14 @@ router.put('/:id', (req, res) => {
 
   const { deposit_date, currency, coin, cash_back, items } = req.body;
   if (!deposit_date) return res.status(400).json({ error: 'deposit_date is required.' });
+  if (Array.isArray(items)) {
+    for (const item of items) {
+      const a = parseFloat(item.amount);
+      if (!isFinite(a) || a <= 0) {
+        return res.status(400).json({ error: 'Each deposit item amount must be a positive number.' });
+      }
+    }
+  }
 
   const update = db.transaction(() => {
     db.prepare(`
@@ -124,7 +140,7 @@ router.put('/:id', (req, res) => {
           item.bank_no  || null,
           item.payee    || null,
           item.memo     || null,
-          parseFloat(item.amount) || 0,
+          parseFloat(item.amount),
         );
       });
     }

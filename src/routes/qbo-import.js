@@ -262,10 +262,18 @@ function confirmDeposits(db, records, account_id) {
 // POST /api/qbo-import/parse
 router.post('/parse', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
+
   const type = req.body.type;
   if (type !== 'checks' && type !== 'deposits') {
     fs.unlink(req.file.path, () => {});
     return res.status(400).json({ error: 'Invalid type. Must be "checks" or "deposits".' });
+  }
+
+  // Reject non-text MIME types — only CSV/plain text is expected
+  const mime = (req.file.mimetype || '').toLowerCase();
+  if (!mime.startsWith('text/') && mime !== 'application/csv' && mime !== 'application/vnd.ms-excel') {
+    fs.unlink(req.file.path, () => {});
+    return res.status(400).json({ error: 'File must be a CSV text file.' });
   }
 
   let text;
