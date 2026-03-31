@@ -43,6 +43,39 @@
         </div>
         <div id="login-error" class="wizard-error" hidden></div>
         <button id="btn-login-submit" class="btn-primary" style="width:100%;margin-top:8px">Sign In</button>
+        <div style="text-align:center;margin-top:8px">
+          <a href="#" id="link-forgot-password" style="font-size:12px;color:var(--text-muted)">Forgot password?</a>
+        </div>
+      </div>
+      <!-- Forgot password -->
+      <div id="login-forgot-section" hidden>
+        <h2>Reset Password</h2>
+        <p class="login-sub">Enter your email and we'll send a reset link.</p>
+        <div class="form-group">
+          <label for="forgot-email">Email</label>
+          <input type="email" id="forgot-email" autocomplete="email">
+        </div>
+        <div id="forgot-error" class="wizard-error" hidden></div>
+        <div id="forgot-success" class="import-result" hidden></div>
+        <button id="btn-forgot-submit" class="btn-primary" style="width:100%;margin-top:8px">Send Reset Link</button>
+        <div style="text-align:center;margin-top:8px">
+          <a href="#" id="link-back-to-login" style="font-size:12px;color:var(--text-muted)">Back to Sign In</a>
+        </div>
+      </div>
+      <!-- Reset password (arrived via emailed link) -->
+      <div id="login-reset-section" hidden>
+        <h2>Set New Password</h2>
+        <div class="form-group">
+          <label for="reset-password">New Password <span class="field-hint">(min 10 chars, include a digit or symbol)</span></label>
+          <input type="password" id="reset-password" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label for="reset-password2">Confirm Password</label>
+          <input type="password" id="reset-password2" autocomplete="new-password">
+        </div>
+        <div id="reset-error" class="wizard-error" hidden></div>
+        <div id="reset-success" class="import-result" hidden></div>
+        <button id="btn-reset-submit" class="btn-primary" style="width:100%;margin-top:8px">Set Password</button>
       </div>
     </div>
   </div>
@@ -52,6 +85,7 @@
       <span class="header-brand" id="company-name">ezcheck</span>
       <select id="account-switcher" class="account-switcher" title="Switch account"></select>
       <button id="btn-account-settings" class="btn-header-icon" title="Account settings" data-admin-only>⚙</button>
+      <button id="btn-add-account" class="btn-header-icon" title="Add checking account" data-admin-only>+</button>
     </div>
     <div class="header-right">
       <span class="header-info">Next check: <strong id="current-check-no">—</strong><button id="btn-set-check-no" class="btn-header-inline" title="Set next check number" data-admin-only>✎</button></span>
@@ -620,6 +654,10 @@
             <label for="uf-username">Username</label>
             <input type="text" id="uf-username" autocapitalize="none">
           </div>
+          <div class="form-group">
+            <label for="uf-email">Email <span class="field-hint">(for password reset)</span></label>
+            <input type="email" id="uf-email" autocomplete="email">
+          </div>
           <div class="form-group required">
             <label for="uf-password">Password <span class="field-hint" id="uf-password-hint">(min 10 chars, include a digit or symbol)</span></label>
             <input type="password" id="uf-password" autocomplete="new-password">
@@ -642,6 +680,44 @@
           <button id="btn-save-user" class="btn-primary">Add User</button>
           <button id="btn-cancel-user-edit" class="btn-ghost" hidden>Cancel</button>
         </div>
+      </div>
+      <!-- SMTP settings (admin only) -->
+      <div id="smtp-settings-section" style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
+        <h3 style="font-size:13px;font-weight:600;margin-bottom:10px">Email Settings (SMTP)</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="smtp-host">SMTP Host</label>
+            <input type="text" id="smtp-host" placeholder="smtp.example.com">
+          </div>
+          <div class="form-group" style="max-width:90px">
+            <label for="smtp-port">Port</label>
+            <input type="number" id="smtp-port" value="587" min="1" max="65535">
+          </div>
+          <div class="form-group" style="max-width:140px">
+            <label for="smtp-secure">Encryption</label>
+            <select id="smtp-secure">
+              <option value="0">STARTTLS (587)</option>
+              <option value="1">SSL/TLS (465)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="smtp-user">Username</label>
+            <input type="text" id="smtp-user" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label for="smtp-pass">Password <span class="field-hint" id="smtp-pass-hint"></span></label>
+            <input type="password" id="smtp-pass" autocomplete="new-password">
+          </div>
+          <div class="form-group">
+            <label for="smtp-from">From Address</label>
+            <input type="email" id="smtp-from" placeholder="ezcheck@example.com">
+          </div>
+        </div>
+        <div id="smtp-error" class="wizard-error" hidden></div>
+        <div id="smtp-success" class="import-result" hidden></div>
+        <button id="btn-save-smtp" class="btn-secondary" style="margin-top:8px">Save Email Settings</button>
       </div>
       <!-- Change own password -->
       <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">

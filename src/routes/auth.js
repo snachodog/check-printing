@@ -3,6 +3,7 @@
 const express = require('express');
 const router  = express.Router();
 const bcrypt  = require('bcryptjs');
+const crypto  = require('crypto');
 const db      = require('../db/database');
 
 // ── Password validation ───────────────────────────────────────────────────────
@@ -141,6 +142,60 @@ router.post('/change-password', async (req, res) => {
   const hash = await bcrypt.hash(new_password, 12);
   db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?")
     .run(hash, req.session.userId);
+
+  res.json({ ok: true });
+});
+
+// POST /api/auth/forgot-password — always 200 to avoid user enumeration
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email is required.' });
+
+  const user = db.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE').get(email.trim());
+  if (user) {
+    const token     = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+    db.transaction(() => {
+      db.prepare('DELETE FROM password_reset_tokens WHERE user_id = ?').run(user.id);
+      db.prepare('INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)').run(user.id, tokenHash, expiresAt);
+    })();
+
+    const baseUrl   = `${req.protocol}://${req.get('host')}`;
+    const resetLink = `${baseUrl}/#reset?token=${token}`;
+
+    try {
+      const { sendPasswordReset } = require('../services/emailService');
+      await sendPasswordReset(email.trim(), resetLink);
+    } catch (err) {
+      console.error('[password-reset] Failed to send email:', err.message);
+    }
+  }
+
+  res.json({ ok: true, message: 'If that email is on file, a reset link has been sent.' });
+});
+
+// POST /api/auth/reset-password — validates token, updates password
+router.post('/reset-password', async (req, res) => {
+  const { token, new_password } = req.body;
+  if (!token || !new_password) return res.status(400).json({ error: 'Token and new password are required.' });
+
+  const pwErr = validatePassword(new_password);
+  if (pwErr) return res.status(400).json({ error: pwErr });
+
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const row = db.prepare('SELECT * FROM password_reset_tokens WHERE token_hash = ? AND used_at IS NULL').get(tokenHash);
+
+  if (!row || new Date(row.expires_at) < new Date()) {
+    return res.status(400).json({ error: 'Invalid or expired reset link.' });
+  }
+
+  const hash = await bcrypt.hash(new_password, 12);
+  db.transaction(() => {
+    db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?").run(hash, row.user_id);
+    db.prepare("UPDATE password_reset_tokens SET used_at = datetime('now') WHERE id = ?").run(row.id);
+  })();
 
   res.json({ ok: true });
 });

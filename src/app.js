@@ -58,6 +58,9 @@ app.use('/api', requireAuth);
 // ── User management (admin only) ──────────────────────────────────────────────
 app.use('/api/users', require('./routes/users'));
 
+// ── App settings (admin only) ─────────────────────────────────────────────────
+app.use('/api/settings', require('./routes/settings'));
+
 // ── Check routes ──────────────────────────────────────────────────────────────
 app.use('/api/checks', require('./routes/checks'));
 

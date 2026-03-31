@@ -11,7 +11,7 @@ const { validatePassword } = require('./auth');
 router.use(requireAuth, requireAdmin);
 
 function userWithAccounts(id) {
-  const user = db.prepare('SELECT id, username, role, created_at FROM users WHERE id = ?').get(id);
+  const user = db.prepare('SELECT id, username, email, role, created_at FROM users WHERE id = ?').get(id);
   if (!user) return null;
   user.accounts = db.prepare('SELECT account_id, role FROM user_accounts WHERE user_id = ?').all(id);
   return user;
@@ -19,7 +19,7 @@ function userWithAccounts(id) {
 
 // GET /api/users
 router.get('/', (req, res) => {
-  const users = db.prepare('SELECT id, username, role, created_at FROM users ORDER BY id ASC').all();
+  const users = db.prepare('SELECT id, username, email, role, created_at FROM users ORDER BY id ASC').all();
   users.forEach(u => {
     u.accounts = db.prepare('SELECT account_id, role FROM user_accounts WHERE user_id = ?').all(u.id);
   });
@@ -28,7 +28,7 @@ router.get('/', (req, res) => {
 
 // POST /api/users
 router.post('/', async (req, res) => {
-  const { username, password, role, accounts } = req.body;
+  const { username, password, role, accounts, email } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required.' });
   if (!['admin', 'editor', 'viewer'].includes(role)) return res.status(400).json({ error: 'Invalid role.' });
   const pwErr = validatePassword(password);
@@ -39,8 +39,8 @@ router.post('/', async (req, res) => {
   let userId;
   try {
     const result = db.prepare(
-      'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)'
-    ).run(username.trim(), hash, role);
+      'INSERT INTO users (username, password_hash, role, email) VALUES (?, ?, ?, ?)'
+    ).run(username.trim(), hash, role, email ? email.trim() : null);
     userId = result.lastInsertRowid;
   } catch (err) {
     if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'Username already taken.' });
@@ -60,7 +60,7 @@ router.put('/:id', async (req, res) => {
   const user = db.prepare('SELECT id, role FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.status(404).json({ error: 'User not found.' });
 
-  const { username, password, role, accounts } = req.body;
+  const { username, password, role, accounts, email } = req.body;
 
   if (role && !['admin', 'editor', 'viewer'].includes(role)) {
     return res.status(400).json({ error: 'Invalid role.' });
@@ -79,6 +79,11 @@ router.put('/:id', async (req, res) => {
   if (role) {
     db.prepare("UPDATE users SET role = ?, updated_at = datetime('now') WHERE id = ?")
       .run(role, req.params.id);
+  }
+
+  if (email !== undefined) {
+    db.prepare("UPDATE users SET email = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(email ? email.trim() : null, req.params.id);
   }
 
   if (password) {
