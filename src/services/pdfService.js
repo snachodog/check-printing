@@ -288,6 +288,10 @@ function resolveFieldValue(fieldName, check, account) {
       return account.company1;
     case 'Company Name2':
       return account.company2;
+    case 'Company Name3':
+      return account.company3;
+    case 'Company Name4':
+      return account.company4;
     case 'Bank Information':
       return [account.bank_name, account.bank_info1, account.bank_info2, account.bank_info3]
         .filter(Boolean).join('\n');

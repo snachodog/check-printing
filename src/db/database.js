@@ -147,4 +147,70 @@ db.exec(`
   )
 `);
 
+// Migration: seed default layout fields for any account that has none.
+// Runs at every startup but INSERT OR IGNORE makes it idempotent.
+(function seedMissingLayoutFields() {
+  const accounts = db.prepare('SELECT id FROM account').all();
+  const countStmt = db.prepare('SELECT COUNT(*) AS n FROM layout_fields WHERE account_id = ?');
+  const insertStmt = db.prepare(`
+    INSERT OR IGNORE INTO layout_fields
+      (account_id, field_name, field_text, font_name, font_size, font_bold,
+       field_type, line_thick, x_pos, y_pos, x_end_pos, y_end_pos, visible)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const defaultFields = [
+    // Company block — top left
+    { field_name: 'Company Name',  field_type: 'Regular', x_pos: 0.50, y_pos: 0.12, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica-Bold', font_size: 10, font_bold: 1, field_text: null, line_thick: 1, visible: 1 },
+    { field_name: 'Company Name2', field_type: 'Regular', x_pos: 0.50, y_pos: 0.30, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica',      font_size: 9,  font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
+    { field_name: 'Company Name3', field_type: 'Regular', x_pos: 0.50, y_pos: 0.44, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica',      font_size: 9,  font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
+    { field_name: 'Company Name4', field_type: 'Regular', x_pos: 0.50, y_pos: 0.58, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica',      font_size: 9,  font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
+    // Check number — top right
+    { field_name: 'Check Number',  field_type: 'Regular', x_pos: 7.20, y_pos: 0.12, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica-Bold', font_size: 10, font_bold: 1, field_text: null, line_thick: 1, visible: 1 },
+    // Date — upper right
+    { field_name: 'Date Label',    field_type: 'Text',    x_pos: 5.80, y_pos: 0.40, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica',      font_size: 8,  font_bold: 0, field_text: 'DATE', line_thick: 1, visible: 1 },
+    { field_name: 'Date',          field_type: 'Regular', x_pos: 6.30, y_pos: 0.40, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica',      font_size: 9,  font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
+    // Pay to the order of
+    { field_name: 'Pay To Label',  field_type: 'Text',    x_pos: 0.30, y_pos: 0.82, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica',      font_size: 7,  font_bold: 0, field_text: 'PAY TO THE ORDER OF', line_thick: 1, visible: 1 },
+    { field_name: 'Payee Name',    field_type: 'Regular', x_pos: 2.15, y_pos: 0.80, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica',      font_size: 10, font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
+    // Amount box
+    { field_name: 'Dollar Sign',   field_type: 'Text',    x_pos: 6.80, y_pos: 0.80, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica',      font_size: 10, font_bold: 0, field_text: '$', line_thick: 1, visible: 1 },
+    { field_name: 'Amount',        field_type: 'Regular', x_pos: 6.95, y_pos: 0.80, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica-Bold', font_size: 10, font_bold: 1, field_text: null, line_thick: 1, visible: 1 },
+    // Written amount
+    { field_name: 'Text Amount',   field_type: 'Regular', x_pos: 0.30, y_pos: 1.28, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica',      font_size: 9,  font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
+    { field_name: 'Dollars Label', field_type: 'Text',    x_pos: 6.30, y_pos: 1.28, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica',      font_size: 8,  font_bold: 0, field_text: 'DOLLARS', line_thick: 1, visible: 1 },
+    // Bank info block
+    { field_name: 'Bank Information',  field_type: 'Regular', x_pos: 0.30, y_pos: 1.82, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica', font_size: 8,  font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
+    { field_name: 'Bank Transit Code', field_type: 'Regular', x_pos: 0.30, y_pos: 2.38, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica', font_size: 7,  font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
+    // Payee address — center window area (for windowed envelopes)
+    { field_name: 'Payee Address', field_type: 'Regular', x_pos: 3.50, y_pos: 1.82, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica',      font_size: 9,  font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
+    // Memo
+    { field_name: 'Memo Label',    field_type: 'Text',    x_pos: 0.30, y_pos: 2.82, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica',      font_size: 7,  font_bold: 0, field_text: 'MEMO', line_thick: 1, visible: 1 },
+    { field_name: 'Memo',          field_type: 'Regular', x_pos: 0.72, y_pos: 2.82, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica',      font_size: 9,  font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
+    // Auth signature label
+    { field_name: 'Auth Signature Label', field_type: 'Text', x_pos: 5.00, y_pos: 3.14, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica', font_size: 6,  font_bold: 0, field_text: 'AUTHORIZED SIGNATURE', line_thick: 1, visible: 1 },
+    // Lines
+    { field_name: 'Payee Line',        field_type: 'Line', x_pos: 2.10, y_pos: 1.00, x_end_pos: 6.70, y_end_pos: 1.00, font_name: 'Helvetica', font_size: 10, font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
+    { field_name: 'Amount Box Top',    field_type: 'Line', x_pos: 6.75, y_pos: 0.70, x_end_pos: 8.30, y_end_pos: 0.70, font_name: 'Helvetica', font_size: 10, font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
+    { field_name: 'Amount Box Left',   field_type: 'Line', x_pos: 6.75, y_pos: 0.70, x_end_pos: 6.75, y_end_pos: 1.05, font_name: 'Helvetica', font_size: 10, font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
+    { field_name: 'Amount Box Bottom', field_type: 'Line', x_pos: 6.75, y_pos: 1.05, x_end_pos: 8.30, y_end_pos: 1.05, font_name: 'Helvetica', font_size: 10, font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
+    { field_name: 'Text Amount Line',  field_type: 'Line', x_pos: 0.30, y_pos: 1.48, x_end_pos: 6.30, y_end_pos: 1.48, font_name: 'Helvetica', font_size: 10, font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
+    { field_name: 'Memo Line',         field_type: 'Line', x_pos: 0.68, y_pos: 3.00, x_end_pos: 4.00, y_end_pos: 3.00, font_name: 'Helvetica', font_size: 10, font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
+    { field_name: 'Signature Line',    field_type: 'Line', x_pos: 5.00, y_pos: 3.10, x_end_pos: 8.20, y_end_pos: 3.10, font_name: 'Helvetica', font_size: 10, font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
+  ];
+
+  const seedAccount = db.transaction(accountId => {
+    for (const f of defaultFields) {
+      insertStmt.run(accountId, f.field_name, f.field_text, f.font_name, f.font_size, f.font_bold,
+        f.field_type, f.line_thick, f.x_pos, f.y_pos, f.x_end_pos, f.y_end_pos, f.visible);
+    }
+  });
+
+  for (const { id } of accounts) {
+    if (countStmt.get(id).n === 0) {
+      seedAccount(id);
+    }
+  }
+})();
+
 module.exports = db;
