@@ -147,19 +147,8 @@ db.exec(`
   )
 `);
 
-// Migration: seed default layout fields for any account that has none.
-// Runs at every startup but INSERT OR IGNORE makes it idempotent.
-(function seedMissingLayoutFields() {
-  const accounts = db.prepare('SELECT id FROM account').all();
-  const countStmt = db.prepare('SELECT COUNT(*) AS n FROM layout_fields WHERE account_id = ?');
-  const insertStmt = db.prepare(`
-    INSERT OR IGNORE INTO layout_fields
-      (account_id, field_name, field_text, font_name, font_size, font_bold,
-       field_type, line_thick, x_pos, y_pos, x_end_pos, y_end_pos, visible)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const defaultFields = [
+// Default layout fields used for seeding and migration.
+const DEFAULT_LAYOUT_FIELDS = [
     // Company block — top left
     { field_name: 'Company Name',  field_type: 'Regular', x_pos: 0.50, y_pos: 0.12, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica-Bold', font_size: 10, font_bold: 1, field_text: null, line_thick: 1, visible: 1 },
     { field_name: 'Company Name2', field_type: 'Regular', x_pos: 0.50, y_pos: 0.30, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica',      font_size: 9,  font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
@@ -199,18 +188,42 @@ db.exec(`
     { field_name: 'Signature Line',    field_type: 'Line', x_pos: 5.00, y_pos: 3.10, x_end_pos: 8.20, y_end_pos: 3.10, font_name: 'Helvetica', font_size: 10, font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
   ];
 
-  const seedAccount = db.transaction(accountId => {
-    for (const f of defaultFields) {
-      insertStmt.run(accountId, f.field_name, f.field_text, f.font_name, f.font_size, f.font_bold,
+function seedLayoutFields(accountId) {
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO layout_fields
+      (account_id, field_name, field_text, font_name, font_size, font_bold,
+       field_type, line_thick, x_pos, y_pos, x_end_pos, y_end_pos, visible)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  db.transaction(() => {
+    for (const f of DEFAULT_LAYOUT_FIELDS) {
+      insert.run(accountId, f.field_name, f.field_text, f.font_name, f.font_size, f.font_bold,
         f.field_type, f.line_thick, f.x_pos, f.y_pos, f.x_end_pos, f.y_end_pos, f.visible);
     }
-  });
+  })();
+}
 
-  for (const { id } of accounts) {
-    if (countStmt.get(id).n === 0) {
-      seedAccount(id);
+// Migration: reset all accounts to default layout (runs once, gated by settings key).
+// Replaces any .mdb-imported or legacy layout_fields with the clean default layout.
+if (!db.prepare("SELECT value FROM settings WHERE key = 'layout_reset_v1'").get()) {
+  const accounts = db.prepare('SELECT id FROM account').all();
+  db.transaction(() => {
+    for (const { id } of accounts) {
+      db.prepare('DELETE FROM layout_fields WHERE account_id = ?').run(id);
+      seedLayoutFields(id);
     }
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('layout_reset_v1', '1')").run();
+  })();
+}
+
+// Migration: seed default layout fields for any account that has none (ongoing, idempotent).
+(function seedMissingLayoutFields() {
+  const accounts = db.prepare('SELECT id FROM account').all();
+  for (const { id } of accounts) {
+    const { n } = db.prepare('SELECT COUNT(*) AS n FROM layout_fields WHERE account_id = ?').get(id);
+    if (n === 0) seedLayoutFields(id);
   }
 })();
 
 module.exports = db;
+module.exports.seedLayoutFields = seedLayoutFields;
