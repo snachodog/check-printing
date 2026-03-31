@@ -209,8 +209,8 @@ function renderUsersList() {
         <td>${roleBadge(u.role)}</td>
         <td style="font-size:12px">${accountsLabel}</td>
         <td style="white-space:nowrap">
-          <button class="btn-sm btn-secondary" onclick="startUserEdit(${u.id})">Edit</button>
-          ${!isSelf ? `<button class="btn-sm btn-danger" style="margin-left:4px" onclick="deleteUser(${u.id})">Delete</button>` : ''}
+          <button class="btn-sm btn-secondary user-btn-edit" data-id="${u.id}">Edit</button>
+          ${!isSelf ? `<button class="btn-sm btn-danger user-btn-delete" style="margin-left:4px" data-id="${u.id}">Delete</button>` : ''}
         </td>
       </tr>`;
     }).join('')}
@@ -1798,6 +1798,12 @@ async function init() {
   document.getElementById('btn-users').addEventListener('click', openUsersModal);
   document.getElementById('btn-close-users').addEventListener('click', closeUsersModal);
   document.getElementById('users-overlay').addEventListener('click', closeUsersModal);
+  document.getElementById('users-list').addEventListener('click', e => {
+    const editBtn   = e.target.closest('.user-btn-edit');
+    const deleteBtn = e.target.closest('.user-btn-delete');
+    if (editBtn)   startUserEdit(parseInt(editBtn.dataset.id, 10));
+    if (deleteBtn) deleteUser(parseInt(deleteBtn.dataset.id, 10));
+  });
   document.getElementById('btn-save-user').addEventListener('click', saveUser);
   document.getElementById('btn-cancel-user-edit').addEventListener('click', cancelUserEdit);
   document.getElementById('uf-role').addEventListener('change', renderUfAccountCheckboxes);
