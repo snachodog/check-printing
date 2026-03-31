@@ -122,4 +122,29 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_layout_account ON layout_fields(account_id);
 `);
 
+// Migration: add email column to users
+const usersInfo = db.prepare('PRAGMA table_info(users)').all();
+if (!usersInfo.some(c => c.name === 'email')) {
+  db.exec('ALTER TABLE users ADD COLUMN email TEXT');
+}
+
+// Migration: create password_reset_tokens table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at    TEXT
+  )
+`);
+
+// Migration: create settings table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+  )
+`);
+
 module.exports = db;

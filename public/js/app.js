@@ -40,7 +40,18 @@ function hideLoginOverlay() {
   document.getElementById('login-overlay').classList.add('hidden');
 }
 
+function showLoginSection(section) {
+  ['login-setup-section', 'login-form-section', 'login-forgot-section', 'login-reset-section']
+    .forEach(id => { document.getElementById(id).hidden = id !== section; });
+}
+
 async function checkAuth() {
+  // Password reset link detection
+  if (location.hash.startsWith('#reset?')) {
+    showLoginSection('login-reset-section');
+    showLoginOverlay();
+    return false;
+  }
   // Is there already a session?
   const res = await fetch('/api/auth/me');
   if (res.ok) {
@@ -53,11 +64,9 @@ async function checkAuth() {
   const setup = await fetch('/api/auth/setup-needed');
   const { setupNeeded } = await setup.json();
   if (setupNeeded) {
-    document.getElementById('login-setup-section').hidden = false;
-    document.getElementById('login-form-section').hidden  = true;
+    showLoginSection('login-setup-section');
   } else {
-    document.getElementById('login-setup-section').hidden = true;
-    document.getElementById('login-form-section').hidden  = false;
+    showLoginSection('login-form-section');
   }
   showLoginOverlay();
   return false;
@@ -154,6 +163,7 @@ function openUsersModal() {
   document.getElementById('users-modal').classList.add('open');
   loadUsers();
   renderUfAccountCheckboxes();
+  if (state.user && state.user.role === 'admin') loadSmtpSettings();
 }
 
 function closeUsersModal() {
@@ -236,6 +246,7 @@ function startUserEdit(userId) {
   usersState.editingId = userId;
   document.getElementById('user-form-title').textContent = `Edit User: ${u.username}`;
   document.getElementById('uf-username').value  = u.username;
+  document.getElementById('uf-email').value     = u.email || '';
   document.getElementById('uf-password').value  = '';
   document.getElementById('uf-password-hint').textContent = '(leave blank to keep)';
   document.getElementById('uf-role').value       = u.role;
@@ -250,8 +261,9 @@ function cancelUserEdit() {
   usersState.editingId = null;
   document.getElementById('user-form-title').textContent    = 'Add User';
   document.getElementById('uf-username').value  = '';
+  document.getElementById('uf-email').value     = '';
   document.getElementById('uf-password').value  = '';
-  document.getElementById('uf-password-hint').textContent = '(min 8 chars)';
+  document.getElementById('uf-password-hint').textContent = '(min 10 chars, include a digit or symbol)';
   document.getElementById('uf-role').value       = 'viewer';
   document.getElementById('btn-save-user').textContent     = 'Add User';
   document.getElementById('btn-cancel-user-edit').hidden   = true;
@@ -264,6 +276,7 @@ async function saveUser() {
   const btn      = document.getElementById('btn-save-user');
   errEl.hidden   = true;
   const username = document.getElementById('uf-username').value.trim();
+  const email    = document.getElementById('uf-email').value.trim();
   const password = document.getElementById('uf-password').value;
   const role     = document.getElementById('uf-role').value;
   const accounts = Array.from(document.querySelectorAll('input[name="uf-account"]:checked'))
@@ -280,7 +293,7 @@ async function saveUser() {
   const origText = btn.textContent;
   btn.textContent = 'Saving…';
   try {
-    const body = { username, role, accounts };
+    const body = { username, email, role, accounts };
     if (password) body.password = password;
     if (usersState.editingId) {
       await apiFetch('PUT', `/api/users/${usersState.editingId}`, body);
@@ -1505,6 +1518,91 @@ function escHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+// ── Forgot / Reset password ──────────────────────────────────────────────────
+
+async function submitForgotPassword() {
+  const errEl     = document.getElementById('forgot-error');
+  const successEl = document.getElementById('forgot-success');
+  const btn       = document.getElementById('btn-forgot-submit');
+  errEl.hidden = true; successEl.hidden = true;
+  const email = document.getElementById('forgot-email').value.trim();
+  if (!email) { errEl.textContent = 'Email is required.'; errEl.hidden = false; return; }
+  btn.disabled = true;
+  try {
+    const data = await apiFetch('POST', '/api/auth/forgot-password', { email });
+    if (data) { successEl.textContent = data.message; successEl.hidden = false; }
+  } catch (err) {
+    errEl.textContent = err.message; errEl.hidden = false;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function submitResetPassword() {
+  const errEl     = document.getElementById('reset-error');
+  const successEl = document.getElementById('reset-success');
+  const btn       = document.getElementById('btn-reset-submit');
+  errEl.hidden = true; successEl.hidden = true;
+  const password  = document.getElementById('reset-password').value;
+  const password2 = document.getElementById('reset-password2').value;
+  if (password !== password2) { errEl.textContent = 'Passwords do not match.'; errEl.hidden = false; return; }
+  const token = new URLSearchParams(location.hash.slice(location.hash.indexOf('?'))).get('token');
+  if (!token) { errEl.textContent = 'No reset token found.'; errEl.hidden = false; return; }
+  btn.disabled = true;
+  try {
+    await apiFetch('POST', '/api/auth/reset-password', { token, new_password: password });
+    successEl.textContent = 'Password updated. You can now sign in.';
+    successEl.hidden = false;
+    btn.disabled = true;
+    history.replaceState(null, '', '/');
+    setTimeout(() => showLoginSection('login-form-section'), 2000);
+  } catch (err) {
+    errEl.textContent = err.message; errEl.hidden = false;
+    btn.disabled = false;
+  }
+}
+
+// ── SMTP Settings ─────────────────────────────────────────────────────────────
+
+async function loadSmtpSettings() {
+  try {
+    const s = await apiFetch('GET', '/api/settings/smtp');
+    if (!s) return;
+    document.getElementById('smtp-host').value   = s.host;
+    document.getElementById('smtp-port').value   = s.port;
+    document.getElementById('smtp-secure').value = s.secure ? '1' : '0';
+    document.getElementById('smtp-user').value   = s.user;
+    document.getElementById('smtp-from').value   = s.from;
+    document.getElementById('smtp-pass-hint').textContent = s.has_password ? '(leave blank to keep)' : '';
+  } catch (_) {}
+}
+
+async function saveSmtpSettings() {
+  const errEl     = document.getElementById('smtp-error');
+  const successEl = document.getElementById('smtp-success');
+  const btn       = document.getElementById('btn-save-smtp');
+  errEl.hidden = true; successEl.hidden = true;
+  btn.disabled = true;
+  try {
+    await apiFetch('PUT', '/api/settings/smtp', {
+      host:   document.getElementById('smtp-host').value.trim(),
+      port:   document.getElementById('smtp-port').value,
+      secure: document.getElementById('smtp-secure').value === '1',
+      user:   document.getElementById('smtp-user').value.trim(),
+      pass:   document.getElementById('smtp-pass').value,
+      from:   document.getElementById('smtp-from').value.trim(),
+    });
+    successEl.textContent = 'Saved.'; successEl.hidden = false;
+    document.getElementById('smtp-pass').value = '';
+    await loadSmtpSettings();
+    setTimeout(() => { successEl.hidden = true; }, 3000);
+  } catch (err) {
+    errEl.textContent = err.message; errEl.hidden = false;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // ── Initialization ───────────────────────────────────────────────────────────
 
 async function init() {
@@ -1688,6 +1786,14 @@ async function init() {
   document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') submitLogin(); });
   document.getElementById('setup-password2').addEventListener('keydown', e => { if (e.key === 'Enter') submitSetup(); });
 
+  // Forgot / reset password
+  document.getElementById('link-forgot-password').addEventListener('click', e => { e.preventDefault(); showLoginSection('login-forgot-section'); });
+  document.getElementById('link-back-to-login').addEventListener('click', e => { e.preventDefault(); showLoginSection('login-form-section'); });
+  document.getElementById('btn-forgot-submit').addEventListener('click', submitForgotPassword);
+  document.getElementById('forgot-email').addEventListener('keydown', e => { if (e.key === 'Enter') submitForgotPassword(); });
+  document.getElementById('btn-reset-submit').addEventListener('click', submitResetPassword);
+  document.getElementById('reset-password2').addEventListener('keydown', e => { if (e.key === 'Enter') submitResetPassword(); });
+
   // User management
   document.getElementById('btn-users').addEventListener('click', openUsersModal);
   document.getElementById('btn-close-users').addEventListener('click', closeUsersModal);
@@ -1696,6 +1802,10 @@ async function init() {
   document.getElementById('btn-cancel-user-edit').addEventListener('click', cancelUserEdit);
   document.getElementById('uf-role').addEventListener('change', renderUfAccountCheckboxes);
   document.getElementById('btn-change-password').addEventListener('click', changeOwnPassword);
+  document.getElementById('btn-save-smtp').addEventListener('click', saveSmtpSettings);
+
+  // Add checking account
+  document.getElementById('btn-add-account').addEventListener('click', openWizard);
 
   // Initial auth check → loads app if already signed in
   const authed = await checkAuth();
