@@ -1938,7 +1938,7 @@ function svgEl(tag, attrs, text) {
 
 function renderLayoutCanvas() {
   const container = document.getElementById('layout-canvas-container');
-  const W = container.offsetWidth - 24;
+  const W = container.offsetWidth;
   if (W <= 0) return;
   const SCALE = W / 8.5;
   layoutState.scale = SCALE;
@@ -1947,13 +1947,13 @@ function renderLayoutCanvas() {
   container.innerHTML = '';
   const svg = svgEl('svg', { width: W, height: H, style: 'display:block;user-select:none' });
 
-  // Check boundary and background
-  svg.appendChild(svgEl('rect', { x:0, y:0, width:W, height:H, fill:'#fff', stroke:'#ccc', 'stroke-width':1 }));
+  // White check background
+  svg.appendChild(svgEl('rect', { x:0, y:0, width:W, height:H, fill:'#fff', stroke:'#bbb', 'stroke-width':1 }));
 
   // MICR reference line
   const micrY = (3.5 - 0.267) * SCALE;
   svg.appendChild(svgEl('line', { x1:0, y1:micrY, x2:W, y2:micrY, stroke:'#ccc', 'stroke-width':1, 'stroke-dasharray':'4,4' }));
-  svg.appendChild(svgEl('text', { x:4, y:micrY - 3, 'font-size':8, fill:'#bbb', 'font-family':'sans-serif' }, 'MICR'));
+  svg.appendChild(svgEl('text', { x:4, y:micrY - 3, 'font-size':9, fill:'#bbb', 'font-family':'sans-serif' }, 'MICR'));
 
   for (const f of layoutState.fields) {
     const g = createFieldSvgElement(f, SCALE, layoutState.selectedId === f.id);
@@ -1962,6 +1962,56 @@ function renderLayoutCanvas() {
   }
 
   container.appendChild(svg);
+  renderRulers(W, H, SCALE);
+}
+
+function renderRulers(W, H, scale) {
+  const RULER = 24;
+  const topEl  = document.getElementById('layout-ruler-top');
+  const leftEl = document.getElementById('layout-ruler-left');
+  if (!topEl || !leftEl) return;
+
+  // ── Horizontal ruler (top) ──────────────────────────────────────
+  const topSvg = svgEl('svg', { width: W, height: RULER, style: 'display:block' });
+  topSvg.appendChild(svgEl('rect', { x:0, y:0, width:W, height:RULER, fill:'var(--surface)' }));
+
+  for (let n8 = 0; n8 <= Math.ceil(8.5 * 8); n8++) {
+    const inches = n8 / 8;
+    if (inches > 8.5) break;
+    const x = inches * scale;
+    const isInch = n8 % 8 === 0;
+    const isHalf = n8 % 4 === 0;
+    const isQtr  = n8 % 2 === 0;
+    const tickH  = isInch ? RULER - 2 : isHalf ? 14 : isQtr ? 9 : 5;
+    topSvg.appendChild(svgEl('line', { x1:x, y1:RULER, x2:x, y2:RULER - tickH, stroke:'#999', 'stroke-width': isInch ? 1 : 0.5 }));
+    if (isInch && inches > 0) {
+      topSvg.appendChild(svgEl('text', { x:x + 2, y:RULER - tickH - 1, 'font-size':8, fill:'#666', 'font-family':'sans-serif' }, inches + '"'));
+    }
+  }
+  topEl.innerHTML = '';
+  topEl.appendChild(topSvg);
+
+  // ── Vertical ruler (left) ───────────────────────────────────────
+  const leftSvg = svgEl('svg', { width: RULER, height: H, style: 'display:block' });
+  leftSvg.appendChild(svgEl('rect', { x:0, y:0, width:RULER, height:H, fill:'var(--surface)' }));
+
+  for (let n8 = 0; n8 <= Math.ceil(3.5 * 8); n8++) {
+    const inches = n8 / 8;
+    if (inches > 3.5) break;
+    const y = inches * scale;
+    const isInch = n8 % 8 === 0;
+    const isHalf = n8 % 4 === 0;
+    const isQtr  = n8 % 2 === 0;
+    const tickW  = isInch ? RULER - 2 : isHalf ? 14 : isQtr ? 9 : 5;
+    leftSvg.appendChild(svgEl('line', { x1:RULER, y1:y, x2:RULER - tickW, y2:y, stroke:'#999', 'stroke-width': isInch ? 1 : 0.5 }));
+    if (isInch && inches > 0) {
+      const t = svgEl('text', { 'font-size':8, fill:'#666', 'font-family':'sans-serif',
+        'text-anchor':'end', x: RULER - tickW - 2, y: y + 3 }, inches + '"');
+      leftSvg.appendChild(t);
+    }
+  }
+  leftEl.innerHTML = '';
+  leftEl.appendChild(leftSvg);
 }
 
 function createFieldSvgElement(f, scale, selected) {

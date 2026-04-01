@@ -88,10 +88,18 @@ header {
 }
 
 .modal-wide { width: min(720px, 96vw); }
-.modal-layout-editor { width: min(980px, 96vw); }
-.layout-editor-body { flex-direction: row !important; padding: 0 !important; gap: 0; overflow: hidden; min-height: 340px; }
-#layout-canvas-container { flex: 1; min-width: 0; padding: 12px; overflow: hidden; background: var(--bg); }
-#layout-sidebar { width: 200px; flex-shrink: 0; padding: 12px; border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; overflow-y: auto; background: var(--surface); }
+.modal-layout-editor { width: min(1400px, 96vw); height: 92vh; }
+.layout-editor-body { flex: 1; min-height: 0; flex-direction: column !important; padding: 0 !important; gap: 0; overflow: hidden; }
+.layout-canvas-area { flex: 1; min-height: 0; display: grid; grid-template-columns: 24px 1fr; grid-template-rows: 24px 1fr; }
+.layout-ruler-corner { background: var(--surface); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+#layout-ruler-top { background: var(--surface); border-bottom: 1px solid var(--border); overflow: hidden; }
+#layout-ruler-left { background: var(--surface); border-right: 1px solid var(--border); overflow: hidden; }
+#layout-canvas-container { overflow: hidden; background: #d4d4d4; }
+.layout-controls { flex-shrink: 0; display: flex; align-items: center; gap: 14px; padding: 8px 16px; border-top: 1px solid var(--border); background: var(--surface); flex-wrap: wrap; }
+.layout-coord { display: flex; align-items: center; gap: 4px; }
+.layout-coord label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); white-space: nowrap; margin: 0; }
+.layout-coord input { width: 68px; }
+.layout-coord .frac { font-size: 11px; color: var(--text-muted); min-width: 28px; }
 
 .qbo-tabs {
   display: flex;
@@ -816,3 +824,8 @@ input[type="file"] {
   cursor: pointer;
 }
 .account-checkbox-label:hover { border-color: var(--primary); }
+
+/* Hide layout editor button on portrait/mobile — canvas needs landscape space */
+@media (max-width: 768px), (orientation: portrait) {
+  #btn-layout-editor { display: none !important; }
+}
