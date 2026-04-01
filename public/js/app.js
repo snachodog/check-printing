@@ -2014,35 +2014,99 @@ function renderRulers(W, H, scale) {
   leftEl.appendChild(leftSvg);
 }
 
+function getFieldDisplayValue(f) {
+  const a = state.account || {};
+  switch (f.field_name) {
+    case 'Company Name':      return a.company1 || 'Company Name';
+    case 'Company Name2':     return a.company2 || '';
+    case 'Company Name3':     return a.company3 || '';
+    case 'Company Name4':     return a.company4 || '';
+    case 'Check Number':      return '1001';
+    case 'Date':              return '01/01/2025';
+    case 'Payee Name':        return 'Sample Payee';
+    case 'Amount':            return '1,234.56';
+    case 'Text Amount':       return 'One Thousand Two Hundred Thirty Four and 56/100---';
+    case 'Bank Information':  return [a.bank_name, a.bank_info1, a.bank_info2, a.bank_info3].filter(Boolean);
+    case 'Bank Transit Code': return a.transit_code || '';
+    case 'Payee Address':     return ['123 Sample St', 'City, ST 12345'];
+    case 'Memo':              return 'Sample Memo';
+    default:
+      if (f.field_type === 'Text') return f.field_text || '';
+      return f.field_name;
+  }
+}
+
 function createFieldSvgElement(f, scale, selected) {
   const g = svgEl('g', { 'data-field-id': f.id, style: `cursor:grab;opacity:${f.visible ? 1 : 0.35}` });
-  const color = FIELD_COLORS[f.field_type] || '#888';
-  const sw = selected ? 2 : 1;
+  const x = f.x_pos * scale;
+  const y = f.y_pos * scale;
 
   if (f.field_type === 'Line') {
     const x1 = f.x_pos * scale, y1 = f.y_pos * scale;
     const x2 = f.x_end_pos * scale, y2 = f.y_end_pos * scale;
     g.appendChild(svgEl('line', { x1, y1, x2, y2, stroke:'transparent', 'stroke-width':10 }));
-    g.appendChild(svgEl('line', { x1, y1, x2, y2, stroke:color, 'stroke-width': selected ? 2.5 : 1.5 }));
+    g.appendChild(svgEl('line', { x1, y1, x2, y2, stroke: selected ? '#2563eb' : '#333', 'stroke-width': selected ? 2 : 1.5 }));
     if (selected) {
-      g.appendChild(svgEl('circle', { cx:x1, cy:y1, r:3, fill:color }));
-      g.appendChild(svgEl('circle', { cx:x2, cy:y2, r:3, fill:color }));
+      g.appendChild(svgEl('circle', { cx:x1, cy:y1, r:3, fill:'#2563eb' }));
+      g.appendChild(svgEl('circle', { cx:x2, cy:y2, r:3, fill:'#2563eb' }));
     }
-  } else if (f.field_type === 'Graph') {
-    const x = f.x_pos * scale, y = f.y_pos * scale;
+    return g;
+  }
+
+  if (f.field_type === 'Graph') {
     const w = Math.max(4, (f.x_end_pos - f.x_pos) * scale);
     const h = Math.max(4, (f.y_end_pos - f.y_pos) * scale);
-    g.appendChild(svgEl('rect', { x, y, width:w, height:h, fill:`${color}20`, stroke:color, 'stroke-width':sw, 'stroke-dasharray':'4,3' }));
-    g.appendChild(svgEl('text', { x:x+2, y:y+10, 'font-size':7, fill:color, 'font-family':'sans-serif' }, f.field_name));
-  } else {
-    const x = f.x_pos * scale, y = f.y_pos * scale;
-    const label = fieldLabel(f);
-    const boxW = Math.max(24, Math.min(label.length * 5.2, 150));
-    const boxH = Math.max(10, (f.font_size || 10) * 0.85);
-    g.appendChild(svgEl('rect', { x, y: y - boxH * 0.9, width:boxW, height:boxH, fill: selected ? `${color}25` : `${color}12`, stroke:color, 'stroke-width':sw }));
-    const lbl = label.length > 22 ? label.slice(0, 20) + '…' : label;
-    g.appendChild(svgEl('text', { x:x+2, y:y-1, 'font-size':7, fill:color, 'font-family':'sans-serif', 'font-weight': selected ? 'bold' : 'normal' }, lbl));
+    g.appendChild(svgEl('rect', { x, y, width:w, height:h, fill:'#f0f0f0', stroke: selected ? '#2563eb' : '#aaa', 'stroke-width':1, 'stroke-dasharray':'4,3' }));
+    g.appendChild(svgEl('text', { x:x+2, y:y+10, 'font-size':7, fill:'#999', 'font-family':'sans-serif' }, '[image]'));
+    return g;
   }
+
+  // Regular and Text fields — render actual content at proportional size
+  const fontSize   = Math.max(6, (f.font_size || 10) / 72 * scale);
+  const fontWeight = f.font_bold ? 'bold' : 'normal';
+  const displayVal = getFieldDisplayValue(f);
+  const lines      = Array.isArray(displayVal) ? displayVal : [String(displayVal)];
+  const lineHeight = fontSize * 1.3;
+
+  // Invisible hit area so the element is always draggable
+  const approxCharW = fontSize * 0.58;
+  const hitW = Math.max(20, lines.reduce((m, l) => Math.max(m, l.length * approxCharW), 0));
+  const hitH = lines.length * lineHeight + 2;
+  g.appendChild(svgEl('rect', { x, y: y - fontSize, width: hitW, height: hitH, fill: 'transparent' }));
+
+  // Selection highlight
+  if (selected) {
+    g.appendChild(svgEl('rect', {
+      x: x - 2, y: y - fontSize - 2,
+      width: hitW + 4, height: hitH + 4,
+      fill: 'rgba(37,99,235,0.06)', stroke: '#2563eb',
+      'stroke-width': 1, 'stroke-dasharray': '4,3', rx: 2,
+    }));
+  }
+
+  // Text content
+  if (lines.length === 1) {
+    g.appendChild(svgEl('text', {
+      x, y,
+      'font-size': fontSize,
+      'font-family': 'Helvetica, Arial, sans-serif',
+      'font-weight': fontWeight,
+      fill: '#111',
+    }, lines[0]));
+  } else {
+    const textEl = svgEl('text', {
+      x, y,
+      'font-size': fontSize,
+      'font-family': 'Helvetica, Arial, sans-serif',
+      'font-weight': fontWeight,
+      fill: '#111',
+    });
+    lines.forEach((line, i) => {
+      textEl.appendChild(svgEl('tspan', { x, dy: i === 0 ? 0 : lineHeight }, line));
+    });
+    g.appendChild(textEl);
+  }
+
   return g;
 }
 
