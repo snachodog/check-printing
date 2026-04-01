@@ -88,6 +88,10 @@ header {
 }
 
 .modal-wide { width: min(720px, 96vw); }
+.modal-layout-editor { width: min(980px, 96vw); }
+.layout-editor-body { flex-direction: row !important; padding: 0 !important; gap: 0; overflow: hidden; min-height: 340px; }
+#layout-canvas-container { flex: 1; min-width: 0; padding: 12px; overflow: hidden; background: var(--bg); }
+#layout-sidebar { width: 200px; flex-shrink: 0; padding: 12px; border-left: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; overflow-y: auto; background: var(--surface); }
 
 .qbo-tabs {
   display: flex;

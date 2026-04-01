@@ -11,7 +11,7 @@ const session   = require('express-session');
 
 const db     = require('./db/database');
 const { seedLayoutFields } = require('./db/database');
-const { requireAuth, requireAdmin, canAccessAccount } = require('./middleware/auth');
+const { requireAuth, requireAdmin, canAccessAccount, isEditorForAccount } = require('./middleware/auth');
 
 const app    = express();
 const upload = multer({ dest: os.tmpdir() });
@@ -259,6 +259,41 @@ app.post('/api/import', requireAdmin, upload.single('mdbfile'), (req, res) => {
   } finally {
     fs.unlink(tmpPath, () => {});
   }
+});
+
+// ── Layout editor routes ───────────────────────────────────────────────────────
+
+// GET /api/layout/:accountId — all layout_fields for an account
+app.get('/api/layout/:accountId', requireAuth, (req, res) => {
+  const accountId = parseInt(req.params.accountId, 10);
+  if (!canAccessAccount(req.session, accountId)) return res.status(403).json({ error: 'Access denied.' });
+  const fields = db.prepare('SELECT * FROM layout_fields WHERE account_id = ? ORDER BY id').all(accountId);
+  res.json(fields);
+});
+
+// PUT /api/layout/:accountId/:fieldId — update position/visibility of one field
+app.put('/api/layout/:accountId/:fieldId', requireAuth, (req, res) => {
+  const accountId = parseInt(req.params.accountId, 10);
+  const fieldId   = parseInt(req.params.fieldId,   10);
+  if (!isEditorForAccount(req.session, accountId)) return res.status(403).json({ error: 'Write access required.' });
+  const { x_pos, y_pos, x_end_pos, y_end_pos, visible } = req.body;
+  db.prepare(`
+    UPDATE layout_fields SET x_pos=?, y_pos=?, x_end_pos=?, y_end_pos=?, visible=?
+    WHERE id=? AND account_id=?
+  `).run(
+    parseFloat(x_pos) || 0, parseFloat(y_pos) || 0,
+    parseFloat(x_end_pos) || 0, parseFloat(y_end_pos) || 0,
+    visible ? 1 : 0, fieldId, accountId
+  );
+  res.json({ success: true });
+});
+
+// POST /api/layout/:accountId/reset — wipe and re-seed default layout (admin only)
+app.post('/api/layout/:accountId/reset', requireAdmin, (req, res) => {
+  const accountId = parseInt(req.params.accountId, 10);
+  db.prepare('DELETE FROM layout_fields WHERE account_id = ?').run(accountId);
+  seedLayoutFields(accountId);
+  res.json({ success: true });
 });
 
 // Catch-all: serve index.html
