@@ -752,62 +752,60 @@
       <button id="btn-close-layout-editor" class="btn-icon" title="Close">×</button>
     </div>
     <div class="modal-body layout-editor-body">
-      <div id="layout-canvas-container"><!-- SVG rendered by JS --></div>
-      <div id="layout-sidebar">
-        <div class="form-group">
-          <label for="layout-field-select">Field</label>
-          <select id="layout-field-select" style="font-size:12px"></select>
+      <!-- Canvas with rulers -->
+      <div class="layout-canvas-area">
+        <div class="layout-ruler-corner"></div>
+        <div id="layout-ruler-top"></div>
+        <div id="layout-ruler-left"></div>
+        <div id="layout-canvas-container"><!-- SVG rendered by JS --></div>
+      </div>
+      <!-- Controls strip -->
+      <div class="layout-controls">
+        <div class="layout-coord" style="gap:6px">
+          <label for="layout-field-select" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-muted)">Field</label>
+          <select id="layout-field-select" style="font-size:12px;max-width:200px"></select>
         </div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;white-space:nowrap">
           <input type="checkbox" id="layout-field-visible"> Visible
         </label>
-        <div class="form-group">
-          <label for="layout-field-x">X Position</label>
-          <div style="display:flex;align-items:center;gap:6px">
-            <input type="number" id="layout-field-x" step="0.0625" min="0" max="8.5" style="width:72px">
-            <span id="layout-field-x-frac" style="font-size:11px;color:var(--text-muted)"></span>
-          </div>
+        <div style="width:1px;height:24px;background:var(--border)"></div>
+        <div class="layout-coord">
+          <label for="layout-field-x">X</label>
+          <input type="number" id="layout-field-x" step="0.0625" min="0" max="8.5">
+          <span class="frac" id="layout-field-x-frac"></span>
         </div>
-        <div class="form-group">
-          <label for="layout-field-y">Y Position</label>
-          <div style="display:flex;align-items:center;gap:6px">
-            <input type="number" id="layout-field-y" step="0.0625" min="0" max="3.5" style="width:72px">
-            <span id="layout-field-y-frac" style="font-size:11px;color:var(--text-muted)"></span>
-          </div>
+        <div class="layout-coord">
+          <label for="layout-field-y">Y</label>
+          <input type="number" id="layout-field-y" step="0.0625" min="0" max="3.5">
+          <span class="frac" id="layout-field-y-frac"></span>
         </div>
-        <div id="layout-end-pos-group" hidden>
-          <div class="form-group">
+        <div id="layout-end-pos-group" style="display:contents" hidden>
+          <div class="layout-coord">
             <label for="layout-field-x2">End X</label>
-            <div style="display:flex;align-items:center;gap:6px">
-              <input type="number" id="layout-field-x2" step="0.0625" min="0" max="8.5" style="width:72px">
-              <span id="layout-field-x2-frac" style="font-size:11px;color:var(--text-muted)"></span>
-            </div>
+            <input type="number" id="layout-field-x2" step="0.0625" min="0" max="8.5">
+            <span class="frac" id="layout-field-x2-frac"></span>
           </div>
-          <div class="form-group">
+          <div class="layout-coord">
             <label for="layout-field-y2">End Y</label>
-            <div style="display:flex;align-items:center;gap:6px">
-              <input type="number" id="layout-field-y2" step="0.0625" min="0" max="3.5" style="width:72px">
-              <span id="layout-field-y2-frac" style="font-size:11px;color:var(--text-muted)"></span>
-            </div>
+            <input type="number" id="layout-field-y2" step="0.0625" min="0" max="3.5">
+            <span class="frac" id="layout-field-y2-frac"></span>
           </div>
         </div>
-        <div>
-          <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:6px">Nudge ¹⁄₁₆"</div>
-          <div style="display:grid;grid-template-columns:repeat(3,28px);grid-template-rows:repeat(3,28px);gap:3px;justify-content:center">
+        <div style="width:1px;height:24px;background:var(--border)"></div>
+        <!-- Nudge cross -->
+        <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+          <div style="font-size:10px;text-transform:uppercase;color:var(--text-muted);letter-spacing:.04em">¹⁄₁₆"</div>
+          <div style="display:grid;grid-template-columns:repeat(3,22px);grid-template-rows:repeat(3,22px);gap:2px">
+            <span></span><button id="nudge-up"    class="btn-sm btn-secondary" style="padding:0;display:flex;align-items:center;justify-content:center">↑</button><span></span>
+            <button id="nudge-left"  class="btn-sm btn-secondary" style="padding:0;display:flex;align-items:center;justify-content:center">←</button>
             <span></span>
-            <button id="nudge-up"    class="btn-sm btn-secondary" style="padding:0;text-align:center">↑</button>
-            <span></span>
-            <button id="nudge-left"  class="btn-sm btn-secondary" style="padding:0;text-align:center">←</button>
-            <span></span>
-            <button id="nudge-right" class="btn-sm btn-secondary" style="padding:0;text-align:center">→</button>
-            <span></span>
-            <button id="nudge-down"  class="btn-sm btn-secondary" style="padding:0;text-align:center">↓</button>
-            <span></span>
+            <button id="nudge-right" class="btn-sm btn-secondary" style="padding:0;display:flex;align-items:center;justify-content:center">→</button>
+            <span></span><button id="nudge-down"  class="btn-sm btn-secondary" style="padding:0;display:flex;align-items:center;justify-content:center">↓</button><span></span>
           </div>
         </div>
-        <div id="layout-save-status" style="font-size:11px;color:var(--text-muted);text-align:center;min-height:14px"></div>
-        <div style="margin-top:auto;padding-top:8px;border-top:1px solid var(--border)">
-          <button id="btn-layout-reset" class="btn-secondary btn-sm" style="width:100%;font-size:11px" data-admin-only>↺ Reset to Default</button>
+        <div id="layout-save-status" style="font-size:11px;color:var(--text-muted);min-width:56px"></div>
+        <div style="margin-left:auto">
+          <button id="btn-layout-reset" class="btn-secondary btn-sm" data-admin-only>↺ Reset to Default</button>
         </div>
       </div>
     </div>
