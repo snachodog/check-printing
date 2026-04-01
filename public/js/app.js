@@ -1813,9 +1813,328 @@ async function init() {
   // Add checking account
   document.getElementById('btn-add-account').addEventListener('click', openWizard);
 
+  // Layout editor
+  document.getElementById('btn-layout-editor').addEventListener('click', openLayoutEditor);
+  document.getElementById('btn-close-layout-editor').addEventListener('click', closeLayoutEditor);
+  document.getElementById('layout-editor-overlay').addEventListener('click', closeLayoutEditor);
+  document.getElementById('layout-field-select').addEventListener('change', e => selectLayoutField(parseInt(e.target.value, 10)));
+  document.getElementById('layout-field-x').addEventListener('input', onLayoutSidebarChange);
+  document.getElementById('layout-field-y').addEventListener('input', onLayoutSidebarChange);
+  document.getElementById('layout-field-x2').addEventListener('input', onLayoutSidebarChange);
+  document.getElementById('layout-field-y2').addEventListener('input', onLayoutSidebarChange);
+  document.getElementById('layout-field-visible').addEventListener('change', onLayoutSidebarChange);
+  document.getElementById('nudge-up').addEventListener('click',    () => nudgeLayoutField( 0, -1));
+  document.getElementById('nudge-down').addEventListener('click',  () => nudgeLayoutField( 0,  1));
+  document.getElementById('nudge-left').addEventListener('click',  () => nudgeLayoutField(-1,  0));
+  document.getElementById('nudge-right').addEventListener('click', () => nudgeLayoutField( 1,  0));
+  document.getElementById('btn-layout-reset').addEventListener('click', resetLayoutToDefault);
+
   // Initial auth check → loads app if already signed in
   const authed = await checkAuth();
   if (authed) await loadAccounts();
+}
+
+// ── Layout Editor ─────────────────────────────────────────────────────────────
+
+let layoutState = { fields: [], selectedId: null, scale: 80 };
+let layoutDrag = null;
+let layoutSaveTimer = null;
+
+const FIELD_LABELS = {
+  'Company Name':         'Account Name (line 1)',
+  'Company Name2':        'Account Address (line 2)',
+  'Company Name3':        'Account City/State (line 3)',
+  'Company Name4':        'Account Phone/Web (line 4)',
+  'Check Number':         'Check Number',
+  'Date Label':           'Date Label',
+  'Date':                 'Date',
+  'Pay To Label':         '"Pay To" Label',
+  'Payee Name':           'Payee Name',
+  'Dollar Sign':          'Dollar Sign ($)',
+  'Amount':               'Amount (numeric)',
+  'Text Amount':          'Amount (written)',
+  'Dollars Label':        '"Dollars" Label',
+  'Bank Information':     'Bank Information',
+  'Bank Transit Code':    'Transit Code',
+  'Payee Address':        'Payee Address',
+  'Memo Label':           'Memo Label',
+  'Memo':                 'Memo',
+  'Auth Signature Label': '"Authorized Signature" Label',
+  'Payee Line':           'Line: Payee',
+  'Amount Box Top':       'Line: Amount Box (top)',
+  'Amount Box Left':      'Line: Amount Box (left)',
+  'Amount Box Bottom':    'Line: Amount Box (bottom)',
+  'Text Amount Line':     'Line: Written Amount',
+  'Memo Line':            'Line: Memo',
+  'Signature Line':       'Line: Signature',
+};
+const FIELD_COLORS = { Regular: '#2563eb', Text: '#16a34a', Line: '#b45309', Graph: '#7c3aed' };
+
+function fieldLabel(f)        { return FIELD_LABELS[f.field_name] || f.field_name; }
+function round16(v)           { return Math.round(v * 16) / 16; }
+function clampIn(v, lo, hi)   { return Math.max(lo, Math.min(hi, v)); }
+
+const FRAC_MAP = [
+  [0,''], [1/16,'¹⁄₁₆'], [1/8,'⅛'], [3/16,'³⁄₁₆'],
+  [1/4,'¼'], [5/16,'⁵⁄₁₆'], [3/8,'⅜'], [7/16,'⁷⁄₁₆'],
+  [1/2,'½'], [9/16,'⁹⁄₁₆'], [5/8,'⅝'], [11/16,'¹¹⁄₁₆'],
+  [3/4,'¾'], [13/16,'¹³⁄₁₆'], [7/8,'⅞'], [15/16,'¹⁵⁄₁₆'],
+];
+function toFracStr(val) {
+  const w = Math.floor(val);
+  const dec = val - w;
+  const fr = FRAC_MAP.reduce((a, b) => Math.abs(b[0] - dec) < Math.abs(a[0] - dec) ? b : a);
+  const parts = [];
+  if (w) parts.push(w);
+  if (fr[1]) parts.push(fr[1]);
+  return (parts.length ? parts.join(' ') : '0') + '"';
+}
+function setFracEl(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = toFracStr(val || 0);
+}
+
+function openLayoutEditor() {
+  if (!state.activeAccountId) return;
+  document.getElementById('layout-editor-overlay').classList.add('open');
+  document.getElementById('layout-editor-modal').classList.add('open');
+  loadLayoutFields();
+}
+
+function closeLayoutEditor() {
+  document.getElementById('layout-editor-overlay').classList.remove('open');
+  document.getElementById('layout-editor-modal').classList.remove('open');
+  layoutState = { fields: [], selectedId: null, scale: 80 };
+  clearTimeout(layoutSaveTimer);
+}
+
+async function loadLayoutFields() {
+  try {
+    layoutState.fields = await apiFetch('GET', `/api/layout/${state.activeAccountId}`);
+    populateLayoutDropdown();
+    requestAnimationFrame(() => {
+      renderLayoutCanvas();
+      if (layoutState.fields.length > 0) selectLayoutField(layoutState.fields[0].id);
+    });
+  } catch (err) {
+    console.error('Failed to load layout fields:', err);
+  }
+}
+
+function populateLayoutDropdown() {
+  const sel = document.getElementById('layout-field-select');
+  sel.innerHTML = layoutState.fields.map(f =>
+    `<option value="${f.id}">${escHtml(fieldLabel(f))}</option>`
+  ).join('');
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function svgEl(tag, attrs, text) {
+  const el = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  if (text != null) el.textContent = text;
+  return el;
+}
+
+function renderLayoutCanvas() {
+  const container = document.getElementById('layout-canvas-container');
+  const W = container.offsetWidth - 24;
+  if (W <= 0) return;
+  const SCALE = W / 8.5;
+  layoutState.scale = SCALE;
+  const H = 3.5 * SCALE;
+
+  container.innerHTML = '';
+  const svg = svgEl('svg', { width: W, height: H, style: 'display:block;user-select:none' });
+
+  // Check boundary and background
+  svg.appendChild(svgEl('rect', { x:0, y:0, width:W, height:H, fill:'#fff', stroke:'#ccc', 'stroke-width':1 }));
+
+  // MICR reference line
+  const micrY = (3.5 - 0.267) * SCALE;
+  svg.appendChild(svgEl('line', { x1:0, y1:micrY, x2:W, y2:micrY, stroke:'#ccc', 'stroke-width':1, 'stroke-dasharray':'4,4' }));
+  svg.appendChild(svgEl('text', { x:4, y:micrY - 3, 'font-size':8, fill:'#bbb', 'font-family':'sans-serif' }, 'MICR'));
+
+  for (const f of layoutState.fields) {
+    const g = createFieldSvgElement(f, SCALE, layoutState.selectedId === f.id);
+    svg.appendChild(g);
+    attachFieldEvents(g, f);
+  }
+
+  container.appendChild(svg);
+}
+
+function createFieldSvgElement(f, scale, selected) {
+  const g = svgEl('g', { 'data-field-id': f.id, style: `cursor:grab;opacity:${f.visible ? 1 : 0.35}` });
+  const color = FIELD_COLORS[f.field_type] || '#888';
+  const sw = selected ? 2 : 1;
+
+  if (f.field_type === 'Line') {
+    const x1 = f.x_pos * scale, y1 = f.y_pos * scale;
+    const x2 = f.x_end_pos * scale, y2 = f.y_end_pos * scale;
+    g.appendChild(svgEl('line', { x1, y1, x2, y2, stroke:'transparent', 'stroke-width':10 }));
+    g.appendChild(svgEl('line', { x1, y1, x2, y2, stroke:color, 'stroke-width': selected ? 2.5 : 1.5 }));
+    if (selected) {
+      g.appendChild(svgEl('circle', { cx:x1, cy:y1, r:3, fill:color }));
+      g.appendChild(svgEl('circle', { cx:x2, cy:y2, r:3, fill:color }));
+    }
+  } else if (f.field_type === 'Graph') {
+    const x = f.x_pos * scale, y = f.y_pos * scale;
+    const w = Math.max(4, (f.x_end_pos - f.x_pos) * scale);
+    const h = Math.max(4, (f.y_end_pos - f.y_pos) * scale);
+    g.appendChild(svgEl('rect', { x, y, width:w, height:h, fill:`${color}20`, stroke:color, 'stroke-width':sw, 'stroke-dasharray':'4,3' }));
+    g.appendChild(svgEl('text', { x:x+2, y:y+10, 'font-size':7, fill:color, 'font-family':'sans-serif' }, f.field_name));
+  } else {
+    const x = f.x_pos * scale, y = f.y_pos * scale;
+    const label = fieldLabel(f);
+    const boxW = Math.max(24, Math.min(label.length * 5.2, 150));
+    const boxH = Math.max(10, (f.font_size || 10) * 0.85);
+    g.appendChild(svgEl('rect', { x, y: y - boxH * 0.9, width:boxW, height:boxH, fill: selected ? `${color}25` : `${color}12`, stroke:color, 'stroke-width':sw }));
+    const lbl = label.length > 22 ? label.slice(0, 20) + '…' : label;
+    g.appendChild(svgEl('text', { x:x+2, y:y-1, 'font-size':7, fill:color, 'font-family':'sans-serif', 'font-weight': selected ? 'bold' : 'normal' }, lbl));
+  }
+  return g;
+}
+
+function attachFieldEvents(g, f) {
+  g.addEventListener('mousedown', e => {
+    selectLayoutField(f.id);
+    startLayoutDrag(e, f);
+    e.stopPropagation();
+    e.preventDefault();
+  });
+}
+
+function selectLayoutField(id) {
+  layoutState.selectedId = id;
+  const sel = document.getElementById('layout-field-select');
+  if (sel) sel.value = id;
+  const f = layoutState.fields.find(x => x.id === id);
+  if (f) updateLayoutSidebar(f);
+  renderLayoutCanvas();
+}
+
+function updateLayoutSidebar(f) {
+  const fmt = x => (x || 0).toFixed(4);
+  document.getElementById('layout-field-visible').checked = !!f.visible;
+  document.getElementById('layout-field-x').value  = fmt(f.x_pos);
+  document.getElementById('layout-field-y').value  = fmt(f.y_pos);
+  document.getElementById('layout-field-x2').value = fmt(f.x_end_pos);
+  document.getElementById('layout-field-y2').value = fmt(f.y_end_pos);
+  setFracEl('layout-field-x-frac',  f.x_pos);
+  setFracEl('layout-field-y-frac',  f.y_pos);
+  setFracEl('layout-field-x2-frac', f.x_end_pos);
+  setFracEl('layout-field-y2-frac', f.y_end_pos);
+  document.getElementById('layout-end-pos-group').hidden =
+    f.field_type !== 'Line' && f.field_type !== 'Graph';
+}
+
+function onLayoutSidebarChange() {
+  const f = layoutState.fields.find(x => x.id === layoutState.selectedId);
+  if (!f) return;
+  f.x_pos     = clampIn(parseFloat(document.getElementById('layout-field-x').value)  || 0, 0, 8.5);
+  f.y_pos     = clampIn(parseFloat(document.getElementById('layout-field-y').value)  || 0, 0, 3.5);
+  f.x_end_pos = clampIn(parseFloat(document.getElementById('layout-field-x2').value) || 0, 0, 8.5);
+  f.y_end_pos = clampIn(parseFloat(document.getElementById('layout-field-y2').value) || 0, 0, 3.5);
+  f.visible   = document.getElementById('layout-field-visible').checked ? 1 : 0;
+  setFracEl('layout-field-x-frac',  f.x_pos);
+  setFracEl('layout-field-y-frac',  f.y_pos);
+  setFracEl('layout-field-x2-frac', f.x_end_pos);
+  setFracEl('layout-field-y2-frac', f.y_end_pos);
+  renderLayoutCanvas();
+  debounceLayoutSave(f);
+}
+
+function startLayoutDrag(e, f) {
+  layoutDrag = {
+    fieldId: f.id,
+    origX: f.x_pos, origY: f.y_pos,
+    origX2: f.x_end_pos, origY2: f.y_end_pos,
+    mouseX: e.clientX, mouseY: e.clientY,
+    moveEnd: f.field_type === 'Line' || f.field_type === 'Graph',
+  };
+  const onMove = ev => onLayoutDragMove(ev);
+  const onUp   = ev => { onLayoutDragEnd(ev); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup',   onUp);
+}
+
+function onLayoutDragMove(e) {
+  if (!layoutDrag) return;
+  const dx = (e.clientX - layoutDrag.mouseX) / layoutState.scale;
+  const dy = (e.clientY - layoutDrag.mouseY) / layoutState.scale;
+  const f  = layoutState.fields.find(x => x.id === layoutDrag.fieldId);
+  if (!f) return;
+  f.x_pos = clampIn(round16(layoutDrag.origX  + dx), 0, 8.5);
+  f.y_pos = clampIn(round16(layoutDrag.origY  + dy), 0, 3.5);
+  if (layoutDrag.moveEnd) {
+    f.x_end_pos = clampIn(round16(layoutDrag.origX2 + dx), 0, 8.5);
+    f.y_end_pos = clampIn(round16(layoutDrag.origY2 + dy), 0, 3.5);
+  }
+  // Update just the dragged element for smooth performance
+  const svg = document.querySelector('#layout-canvas-container svg');
+  if (svg) {
+    const old = svg.querySelector(`[data-field-id="${f.id}"]`);
+    if (old) {
+      const g = createFieldSvgElement(f, layoutState.scale, true);
+      old.replaceWith(g);
+      attachFieldEvents(g, f);
+    }
+  }
+  updateLayoutSidebar(f);
+}
+
+async function onLayoutDragEnd(e) {
+  if (!layoutDrag) return;
+  const id = layoutDrag.fieldId;
+  layoutDrag = null;
+  const f = layoutState.fields.find(x => x.id === id);
+  if (f) await saveLayoutField(f);
+}
+
+function nudgeLayoutField(dx, dy) {
+  const f = layoutState.fields.find(x => x.id === layoutState.selectedId);
+  if (!f) return;
+  const S = 1 / 16;
+  f.x_pos = clampIn(round16(f.x_pos + dx * S), 0, 8.5);
+  f.y_pos = clampIn(round16(f.y_pos + dy * S), 0, 3.5);
+  if (f.field_type === 'Line' || f.field_type === 'Graph') {
+    f.x_end_pos = clampIn(round16(f.x_end_pos + dx * S), 0, 8.5);
+    f.y_end_pos = clampIn(round16(f.y_end_pos + dy * S), 0, 3.5);
+  }
+  updateLayoutSidebar(f);
+  renderLayoutCanvas();
+  debounceLayoutSave(f);
+}
+
+function debounceLayoutSave(f) {
+  clearTimeout(layoutSaveTimer);
+  layoutSaveTimer = setTimeout(() => saveLayoutField(f), 600);
+}
+
+async function saveLayoutField(f) {
+  try {
+    await apiFetch('PUT', `/api/layout/${state.activeAccountId}/${f.id}`, {
+      x_pos: f.x_pos, y_pos: f.y_pos,
+      x_end_pos: f.x_end_pos, y_end_pos: f.y_end_pos,
+      visible: f.visible,
+    });
+    const el = document.getElementById('layout-save-status');
+    if (el) { el.textContent = 'Saved ✓'; setTimeout(() => { if (el) el.textContent = ''; }, 1500); }
+  } catch (err) {
+    const el = document.getElementById('layout-save-status');
+    if (el) el.textContent = 'Save failed';
+  }
+}
+
+async function resetLayoutToDefault() {
+  if (!confirm('Reset all layout fields to default positions? This cannot be undone.')) return;
+  try {
+    await apiFetch('POST', `/api/layout/${state.activeAccountId}/reset`);
+    await loadLayoutFields();
+  } catch (err) {
+    alert('Reset failed: ' + err.message);
+  }
 }
 
 document.addEventListener('DOMContentLoaded', init);
