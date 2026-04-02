@@ -36,7 +36,7 @@ All access requires login. The first run prompts you to create an admin account.
 Three roles are available:
 
 | Role | Access |
-|------|--------|
+| --- | --- |
 | **admin** | Full access to all accounts; create/edit/delete users and accounts |
 | **editor** | Read and write access to assigned accounts |
 | **viewer** | Read-only access to assigned accounts |
@@ -108,6 +108,20 @@ node migrations/import-mdb.js --file YourAccount.mdb --dry-run
 
 The script imports account config (T100), logo (Settings), check layout (T200), and check history (T104).
 
+## Visual layout editor
+
+Each account has an independently configurable check layout. Click the **⊞** button in the header (editors and above only) to open the layout editor.
+
+- Full-screen canvas showing a single check slot at scale, with inch rulers on all edges
+- All check elements are draggable — click to select, drag to reposition
+- Selected field shows position in inches and fractions (¼, ½, ⅛, etc.) with numeric inputs and ±1/16" nudge buttons
+- Line fields (payee line, amount box, memo line, signature line) can be repositioned as a unit
+- Visibility toggle hides a field from PDFs without deleting it
+- Auto-saves 600 ms after any change; immediate save on drag release
+- **Reset to Defaults** restores the built-in layout for that account
+
+The canvas renders actual check content at proportional size — company name, bank info, sample payee and amount — so positioning is WYSIWYG.
+
 ## Check layout
 
 - Page: 8.5" × 11", zero margins
@@ -118,7 +132,7 @@ The script imports account config (T100), logo (Settings), check layout (T200), 
 ## Environment variables
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+| --- | --- | --- |
 | `PORT` | `3000` | HTTP port |
 | `DB_PATH` | `/app/data/check-printing.db` | SQLite database path |
 | `SESSION_SECRET` | *(random)* | Secret for signing session cookies — set explicitly in production |
