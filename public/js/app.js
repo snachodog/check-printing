@@ -98,7 +98,7 @@ async function loadOidcLoginButton() {
     const cfg = await res.json();
     const section = document.getElementById('oidc-login-section');
     if (cfg.enabled) {
-      document.getElementById('btn-oidc-login').textContent = cfg.button_label || 'Sign in with SSO';
+      document.getElementById('btn-oidc-login-label').textContent = cfg.button_label || 'Sign in with SSO';
       section.hidden = false;
     } else {
       section.hidden = true;

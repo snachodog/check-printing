@@ -810,6 +810,56 @@ input[type="file"] {
 .login-card h2 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
 .login-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
 
+.login-divider {
+  display: flex;
+  align-items: center;
+  margin: 16px 0 12px;
+  gap: 12px;
+}
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.login-divider span {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.btn-oidc {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.btn-oidc:hover {
+  background: var(--bg);
+  border-color: #b0b0b0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.btn-oidc:active {
+  background: #e8e8e8;
+}
+.btn-oidc svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
 /* ── User management ── */
 .account-checkboxes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 .account-checkbox-label {
