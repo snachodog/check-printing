@@ -14,6 +14,13 @@ services:
       - DB_PATH=/app/data/check-printing.db
       # Required in production — generate with: openssl rand -hex 32
       - SESSION_SECRET=${SESSION_SECRET}
+      # OIDC / SSO (optional — omit or leave blank to disable)
+      - OIDC_ENABLED=${OIDC_ENABLED:-}
+      - OIDC_DISCOVERY_URL=${OIDC_DISCOVERY_URL:-}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
+      - OIDC_REDIRECT_URI=${OIDC_REDIRECT_URI:-}
+      - OIDC_BUTTON_LABEL=${OIDC_BUTTON_LABEL:-Sign in with SSO}
 
 volumes:
   check-printing-data:
