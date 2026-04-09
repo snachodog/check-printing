@@ -139,6 +139,17 @@ db.exec(`
   )
 `);
 
+// Migration: add OIDC columns to users
+const usersInfo2 = db.prepare('PRAGMA table_info(users)').all();
+if (!usersInfo2.some(c => c.name === 'oidc_sub')) {
+  db.exec(`
+    ALTER TABLE users ADD COLUMN oidc_sub TEXT;
+    ALTER TABLE users ADD COLUMN oidc_issuer TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oidc ON users(oidc_issuer, oidc_sub)
+      WHERE oidc_sub IS NOT NULL;
+  `);
+}
+
 // Migration: create settings table
 db.exec(`
   CREATE TABLE IF NOT EXISTS settings (

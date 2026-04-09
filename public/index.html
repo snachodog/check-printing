@@ -43,6 +43,10 @@
         </div>
         <div id="login-error" class="wizard-error" hidden></div>
         <button id="btn-login-submit" class="btn-primary" style="width:100%;margin-top:8px">Sign In</button>
+        <div id="oidc-login-section" hidden>
+          <div style="text-align:center;margin:12px 0 4px;color:var(--text-muted);font-size:12px">or</div>
+          <a id="btn-oidc-login" href="/api/auth/oidc/authorize" class="btn-secondary" style="width:100%;display:block;text-align:center;text-decoration:none">Sign in with SSO</a>
+        </div>
         <div style="text-align:center;margin-top:8px">
           <a href="#" id="link-forgot-password" style="font-size:12px;color:var(--text-muted)">Forgot password?</a>
         </div>
@@ -91,7 +95,7 @@
     <div class="header-right">
       <span class="header-info">Next check: <strong id="current-check-no">—</strong><button id="btn-set-check-no" class="btn-header-inline" title="Set next check number" data-admin-only>✎</button></span>
       <button id="btn-users" class="btn-header-icon" title="Manage users" data-admin-only hidden>👥</button>
-      <span id="header-username" class="header-username"></span>
+      <span id="header-username" class="header-username" style="cursor:pointer" title="Account settings"></span>
       <button id="btn-logout" class="btn-header-icon" title="Sign out">↩</button>
     </div>
   </header>
@@ -648,7 +652,7 @@
     </div>
     <div class="modal-body">
       <div id="users-list"></div>
-      <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
+      <div id="user-form-section" style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
         <h3 style="font-size:13px;font-weight:600;margin-bottom:10px" id="user-form-title">Add User</h3>
         <div class="form-row">
           <div class="form-group required">
@@ -675,6 +679,16 @@
         <div class="form-group" id="uf-accounts-group">
           <label>Account Access <span class="field-hint">(admins see all — no selection needed)</span></label>
           <div id="uf-accounts-checkboxes" class="account-checkboxes"></div>
+        </div>
+        <div id="uf-oidc-group" class="form-row" hidden>
+          <div class="form-group">
+            <label for="uf-oidc-sub">OIDC Subject <span class="field-hint">(sub claim from provider)</span></label>
+            <input type="text" id="uf-oidc-sub" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label for="uf-oidc-issuer">OIDC Issuer <span class="field-hint">(provider URL)</span></label>
+            <input type="text" id="uf-oidc-issuer" autocomplete="off">
+          </div>
         </div>
         <div id="user-form-error" class="wizard-error" hidden></div>
         <div style="display:flex;gap:8px;margin-top:8px">
@@ -720,6 +734,48 @@
         <div id="smtp-success" class="import-result" hidden></div>
         <button id="btn-save-smtp" class="btn-secondary" style="margin-top:8px">Save Email Settings</button>
       </div>
+      <!-- OIDC settings (admin only) -->
+      <div id="oidc-settings-section" style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
+        <h3 style="font-size:13px;font-weight:600;margin-bottom:10px">Single Sign-On (OIDC)</h3>
+        <div class="form-row">
+          <div class="form-group" style="max-width:100px">
+            <label for="oidc-enabled">Enabled</label>
+            <select id="oidc-enabled">
+              <option value="0">No</option>
+              <option value="1">Yes</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="oidc-button-label">Button Label</label>
+            <input type="text" id="oidc-button-label" placeholder="Sign in with SSO">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="oidc-discovery-url">Discovery URL</label>
+            <input type="url" id="oidc-discovery-url" placeholder="https://auth.example.com/.well-known/openid-configuration">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="oidc-client-id">Client ID</label>
+            <input type="text" id="oidc-client-id" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label for="oidc-client-secret">Client Secret <span class="field-hint" id="oidc-secret-hint"></span></label>
+            <input type="password" id="oidc-client-secret" autocomplete="new-password">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="oidc-redirect-uri">Redirect URI <span class="field-hint">(full external callback URL)</span></label>
+            <input type="url" id="oidc-redirect-uri" placeholder="https://checks.example.com/api/auth/oidc/callback">
+          </div>
+        </div>
+        <div id="oidc-error" class="wizard-error" hidden></div>
+        <div id="oidc-success" class="import-result" hidden></div>
+        <button id="btn-save-oidc" class="btn-secondary" style="margin-top:8px">Save OIDC Settings</button>
+      </div>
       <!-- Change own password -->
       <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
         <h3 style="font-size:13px;font-weight:600;margin-bottom:10px">Change My Password</h3>
@@ -740,6 +796,13 @@
         <div id="cp-error" class="wizard-error" hidden></div>
         <div id="cp-success" class="import-result" hidden>Password changed.</div>
         <button id="btn-change-password" class="btn-secondary" style="margin-top:8px">Change Password</button>
+      </div>
+      <!-- Link my OIDC identity (self-service, shown when OIDC is enabled) -->
+      <div id="oidc-link-section" style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px" hidden>
+        <h3 style="font-size:13px;font-weight:600;margin-bottom:10px">Single Sign-On</h3>
+        <p id="oidc-link-status" style="font-size:12px;color:var(--text-muted);margin-bottom:8px"></p>
+        <a id="btn-oidc-link" href="/api/auth/oidc/link" class="btn-secondary" style="display:inline-block;text-decoration:none">Link My Account</a>
+        <button id="btn-oidc-unlink" class="btn-ghost" style="margin-left:8px" hidden>Unlink</button>
       </div>
     </div>
   </div>

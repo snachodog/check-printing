@@ -11,7 +11,7 @@ const { validatePassword } = require('./auth');
 router.use(requireAuth, requireAdmin);
 
 function userWithAccounts(id) {
-  const user = db.prepare('SELECT id, username, email, role, created_at FROM users WHERE id = ?').get(id);
+  const user = db.prepare('SELECT id, username, email, role, oidc_sub, oidc_issuer, created_at FROM users WHERE id = ?').get(id);
   if (!user) return null;
   user.accounts = db.prepare('SELECT account_id, role FROM user_accounts WHERE user_id = ?').all(id);
   return user;
@@ -19,7 +19,7 @@ function userWithAccounts(id) {
 
 // GET /api/users
 router.get('/', (req, res) => {
-  const users = db.prepare('SELECT id, username, email, role, created_at FROM users ORDER BY id ASC').all();
+  const users = db.prepare('SELECT id, username, email, role, oidc_sub, oidc_issuer, created_at FROM users ORDER BY id ASC').all();
   users.forEach(u => {
     u.accounts = db.prepare('SELECT account_id, role FROM user_accounts WHERE user_id = ?').all(u.id);
   });
@@ -60,7 +60,7 @@ router.put('/:id', async (req, res) => {
   const user = db.prepare('SELECT id, role FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.status(404).json({ error: 'User not found.' });
 
-  const { username, password, role, accounts, email } = req.body;
+  const { username, password, role, accounts, email, oidc_sub, oidc_issuer } = req.body;
 
   if (role && !['admin', 'editor', 'viewer'].includes(role)) {
     return res.status(400).json({ error: 'Invalid role.' });
@@ -92,6 +92,23 @@ router.put('/:id', async (req, res) => {
     const hash = await bcrypt.hash(password, 12);
     db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?")
       .run(hash, req.params.id);
+  }
+
+  // OIDC linking — admin can set or clear oidc_sub/oidc_issuer
+  if (oidc_sub !== undefined) {
+    const newSub    = oidc_sub    ? oidc_sub.trim()    : null;
+    const newIssuer = oidc_issuer ? oidc_issuer.trim() : null;
+    if (newSub && !newIssuer) {
+      return res.status(400).json({ error: 'OIDC issuer is required when setting OIDC subject.' });
+    }
+    if (newSub) {
+      const existing = db.prepare(
+        'SELECT id FROM users WHERE oidc_issuer = ? AND oidc_sub = ? AND id != ?'
+      ).get(newIssuer, newSub, req.params.id);
+      if (existing) return res.status(409).json({ error: 'This OIDC identity is already linked to another user.' });
+    }
+    db.prepare("UPDATE users SET oidc_sub = ?, oidc_issuer = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(newSub, newSub ? newIssuer : null, req.params.id);
   }
 
   if (Array.isArray(accounts)) {

@@ -52,6 +52,23 @@ async function checkAuth() {
     showLoginOverlay();
     return false;
   }
+
+  // OIDC callback error/success detection
+  if (location.hash.startsWith('#oidc-error=')) {
+    const msg = decodeURIComponent(location.hash.slice('#oidc-error='.length));
+    history.replaceState(null, '', location.pathname);
+    showLoginSection('login-form-section');
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = msg;
+    errEl.hidden = false;
+    showLoginOverlay();
+    return false;
+  }
+  if (location.hash === '#oidc-linked') {
+    history.replaceState(null, '', location.pathname);
+    // Fall through to normal auth check — user is still logged in
+  }
+
   // Is there already a session?
   const res = await fetch('/api/auth/me');
   if (res.ok) {
@@ -68,8 +85,25 @@ async function checkAuth() {
   } else {
     showLoginSection('login-form-section');
   }
+  // Show SSO button if OIDC is enabled
+  loadOidcLoginButton();
   showLoginOverlay();
   return false;
+}
+
+async function loadOidcLoginButton() {
+  try {
+    const res = await fetch('/api/auth/oidc/config');
+    if (!res.ok) return;
+    const cfg = await res.json();
+    const section = document.getElementById('oidc-login-section');
+    if (cfg.enabled) {
+      document.getElementById('btn-oidc-login').textContent = cfg.button_label || 'Sign in with SSO';
+      section.hidden = false;
+    } else {
+      section.hidden = true;
+    }
+  } catch { /* ignore */ }
 }
 
 async function submitLogin() {
@@ -158,12 +192,23 @@ function applyRoleUI() {
 let usersState = { users: [], editingId: null };
 
 function openUsersModal() {
+  const isAdmin = state.user && state.user.role === 'admin';
   document.getElementById('user-form-error').hidden = true;
+  document.getElementById('users-title').textContent = isAdmin ? 'Manage Users' : 'My Account';
   document.getElementById('users-overlay').classList.add('open');
   document.getElementById('users-modal').classList.add('open');
-  loadUsers();
-  renderUfAccountCheckboxes();
-  if (state.user && state.user.role === 'admin') loadSmtpSettings();
+  // Admin-only sections
+  document.getElementById('users-list').hidden = !isAdmin;
+  document.getElementById('user-form-section').hidden = !isAdmin;
+  document.getElementById('smtp-settings-section').hidden = !isAdmin;
+  document.getElementById('oidc-settings-section').hidden = !isAdmin;
+  if (isAdmin) {
+    loadUsers();
+    renderUfAccountCheckboxes();
+    loadSmtpSettings();
+    loadOidcSettings();
+  }
+  loadOidcLinkStatus();
 }
 
 function closeUsersModal() {
@@ -204,8 +249,9 @@ function renderUsersList() {
             const name = escHtml(a ? (a.company1 || `Account ${a.account_id}`) : `#${ua.account_id}`);
             return `${name} <span style="font-size:10px;color:${ua.role === 'editor' ? '#16a34a' : '#6b7280'};font-weight:600;text-transform:uppercase">${ua.role}</span>`;
           }).join(', ') : '<em style="color:var(--text-muted)">None</em>');
+      const oidcTag = u.oidc_sub ? ' <span style="font-size:10px;color:#2563eb;font-weight:600" title="OIDC linked">SSO</span>' : '';
       return `<tr>
-        <td><strong>${escHtml(u.username)}</strong>${isSelf ? ' <em style="color:var(--text-muted)">(you)</em>' : ''}</td>
+        <td><strong>${escHtml(u.username)}</strong>${isSelf ? ' <em style="color:var(--text-muted)">(you)</em>' : ''}${oidcTag}</td>
         <td>${roleBadge(u.role)}</td>
         <td style="font-size:12px">${accountsLabel}</td>
         <td style="white-space:nowrap">
@@ -253,6 +299,10 @@ function startUserEdit(userId) {
   document.getElementById('btn-save-user').textContent   = 'Save Changes';
   document.getElementById('btn-cancel-user-edit').hidden = false;
   document.getElementById('user-form-error').hidden = true;
+  // OIDC fields
+  document.getElementById('uf-oidc-sub').value    = u.oidc_sub || '';
+  document.getElementById('uf-oidc-issuer').value = u.oidc_issuer || '';
+  document.getElementById('uf-oidc-group').hidden = false;
   renderUfAccountCheckboxes();
   document.getElementById('uf-username').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -268,6 +318,10 @@ function cancelUserEdit() {
   document.getElementById('btn-save-user').textContent     = 'Add User';
   document.getElementById('btn-cancel-user-edit').hidden   = true;
   document.getElementById('user-form-error').hidden = true;
+  // OIDC fields
+  document.getElementById('uf-oidc-sub').value    = '';
+  document.getElementById('uf-oidc-issuer').value = '';
+  document.getElementById('uf-oidc-group').hidden = true;
   renderUfAccountCheckboxes();
 }
 
@@ -296,6 +350,8 @@ async function saveUser() {
     const body = { username, email, role, accounts };
     if (password) body.password = password;
     if (usersState.editingId) {
+      body.oidc_sub    = document.getElementById('uf-oidc-sub').value.trim();
+      body.oidc_issuer = document.getElementById('uf-oidc-issuer').value.trim();
       await apiFetch('PUT', `/api/users/${usersState.editingId}`, body);
     } else {
       await apiFetch('POST', '/api/users', body);
@@ -1603,6 +1659,83 @@ async function saveSmtpSettings() {
   }
 }
 
+// ── OIDC settings ────────────────────────────────────────────────────────────
+
+async function loadOidcSettings() {
+  try {
+    const s = await apiFetch('GET', '/api/settings/oidc');
+    if (!s) return;
+    document.getElementById('oidc-enabled').value        = s.enabled ? '1' : '0';
+    document.getElementById('oidc-discovery-url').value   = s.discovery_url;
+    document.getElementById('oidc-client-id').value       = s.client_id;
+    document.getElementById('oidc-redirect-uri').value    = s.redirect_uri;
+    document.getElementById('oidc-button-label').value    = s.button_label;
+    document.getElementById('oidc-secret-hint').textContent = s.has_secret ? '(leave blank to keep)' : '';
+  } catch (_) {}
+}
+
+async function saveOidcSettings() {
+  const errEl     = document.getElementById('oidc-error');
+  const successEl = document.getElementById('oidc-success');
+  const btn       = document.getElementById('btn-save-oidc');
+  errEl.hidden = true; successEl.hidden = true;
+  btn.disabled = true;
+  try {
+    await apiFetch('PUT', '/api/settings/oidc', {
+      enabled:       document.getElementById('oidc-enabled').value === '1',
+      discovery_url: document.getElementById('oidc-discovery-url').value.trim(),
+      client_id:     document.getElementById('oidc-client-id').value.trim(),
+      client_secret: document.getElementById('oidc-client-secret').value,
+      redirect_uri:  document.getElementById('oidc-redirect-uri').value.trim(),
+      button_label:  document.getElementById('oidc-button-label').value.trim(),
+    });
+    successEl.textContent = 'Saved.'; successEl.hidden = false;
+    document.getElementById('oidc-client-secret').value = '';
+    await loadOidcSettings();
+    setTimeout(() => { successEl.hidden = true; }, 3000);
+  } catch (err) {
+    errEl.textContent = err.message; errEl.hidden = false;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── OIDC self-service linking ────────────────────────────────────────────────
+
+async function loadOidcLinkStatus() {
+  try {
+    const cfg = await fetch('/api/auth/oidc/config').then(r => r.json());
+    const section = document.getElementById('oidc-link-section');
+    if (!cfg.enabled) { section.hidden = true; return; }
+    section.hidden = false;
+
+    const me = await apiFetch('GET', '/api/auth/me');
+    const statusEl  = document.getElementById('oidc-link-status');
+    const linkBtn   = document.getElementById('btn-oidc-link');
+    const unlinkBtn = document.getElementById('btn-oidc-unlink');
+
+    if (me.oidc_linked) {
+      statusEl.textContent = 'Your account is linked to SSO.';
+      linkBtn.hidden  = true;
+      unlinkBtn.hidden = false;
+    } else {
+      statusEl.textContent = 'Link your account to sign in with SSO.';
+      linkBtn.hidden  = false;
+      unlinkBtn.hidden = true;
+    }
+  } catch (_) {}
+}
+
+async function unlinkOidc() {
+  if (!confirm('Unlink your SSO identity? You will need to use your password to sign in.')) return;
+  try {
+    await apiFetch('POST', '/api/auth/oidc/unlink');
+    await loadOidcLinkStatus();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
 // ── Initialization ───────────────────────────────────────────────────────────
 
 async function init() {
@@ -1796,6 +1929,7 @@ async function init() {
 
   // User management
   document.getElementById('btn-users').addEventListener('click', openUsersModal);
+  document.getElementById('header-username').addEventListener('click', openUsersModal);
   document.getElementById('btn-close-users').addEventListener('click', closeUsersModal);
   document.getElementById('users-overlay').addEventListener('click', closeUsersModal);
   document.getElementById('users-list').addEventListener('click', e => {
@@ -1809,6 +1943,8 @@ async function init() {
   document.getElementById('uf-role').addEventListener('change', renderUfAccountCheckboxes);
   document.getElementById('btn-change-password').addEventListener('click', changeOwnPassword);
   document.getElementById('btn-save-smtp').addEventListener('click', saveSmtpSettings);
+  document.getElementById('btn-save-oidc').addEventListener('click', saveOidcSettings);
+  document.getElementById('btn-oidc-unlink').addEventListener('click', unlinkOidc);
 
   // Add checking account
   document.getElementById('btn-add-account').addEventListener('click', openWizard);

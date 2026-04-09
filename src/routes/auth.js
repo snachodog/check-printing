@@ -123,7 +123,13 @@ router.get('/me', (req, res) => {
   if (!req.session || !req.session.userId) {
     return res.status(401).json({ error: 'Not authenticated.' });
   }
-  res.json({ id: req.session.userId, username: req.session.username, role: req.session.role });
+  const user = db.prepare('SELECT oidc_sub FROM users WHERE id = ?').get(req.session.userId);
+  res.json({
+    id: req.session.userId,
+    username: req.session.username,
+    role: req.session.role,
+    oidc_linked: !!(user && user.oidc_sub),
+  });
 });
 
 // POST /api/auth/change-password — any logged-in user can change their own password
@@ -197,6 +203,181 @@ router.post('/reset-password', async (req, res) => {
     db.prepare("UPDATE password_reset_tokens SET used_at = datetime('now') WHERE id = ?").run(row.id);
   })();
 
+  res.json({ ok: true });
+});
+
+// ── OIDC helpers ─────────────────────────────────────────────────────────────
+
+function getOidcSettings() {
+  const rows = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'oidc_%'").all();
+  const s = Object.fromEntries(rows.map(r => [r.key.replace('oidc_', ''), r.value || '']));
+  return {
+    enabled:       s.enabled === '1',
+    discovery_url: s.discovery_url || '',
+    client_id:     s.client_id     || '',
+    client_secret: s.client_secret || '',
+    redirect_uri:  s.redirect_uri  || '',
+    button_label:  s.button_label  || 'Sign in with SSO',
+  };
+}
+
+async function getOidcClient(settings) {
+  const { Issuer } = require('openid-client');
+  const issuer = await Issuer.discover(settings.discovery_url);
+  return new issuer.Client({
+    client_id:     settings.client_id,
+    client_secret: settings.client_secret,
+    redirect_uris: [settings.redirect_uri],
+    response_types: ['code'],
+  });
+}
+
+// GET /api/auth/oidc/config — public, returns whether OIDC is enabled + button label
+router.get('/oidc/config', (req, res) => {
+  const s = getOidcSettings();
+  res.json({ enabled: s.enabled, button_label: s.button_label });
+});
+
+// GET /api/auth/oidc/authorize — initiates the OIDC flow (redirect to provider)
+router.get('/oidc/authorize', async (req, res) => {
+  try {
+    const settings = getOidcSettings();
+    if (!settings.enabled) return res.status(400).json({ error: 'OIDC is not enabled.' });
+
+    const { generators } = require('openid-client');
+    const client = await getOidcClient(settings);
+
+    const code_verifier = generators.codeVerifier();
+    const code_challenge = generators.codeChallenge(code_verifier);
+    const state = generators.state();
+    const nonce = generators.nonce();
+
+    req.session.oidc = { code_verifier, state, nonce };
+
+    const authUrl = client.authorizationUrl({
+      scope: 'openid email profile',
+      state,
+      nonce,
+      code_challenge,
+      code_challenge_method: 'S256',
+    });
+
+    // Ensure session is persisted before redirecting (saveUninitialized is false)
+    req.session.save(() => res.redirect(authUrl));
+  } catch (err) {
+    console.error('[oidc] authorize error:', err.message);
+    res.redirect('/#oidc-error=' + encodeURIComponent('Failed to initiate SSO login.'));
+  }
+});
+
+// GET /api/auth/oidc/callback — handles the provider redirect
+router.get('/oidc/callback', async (req, res) => {
+  try {
+    const settings = getOidcSettings();
+    if (!settings.enabled) return res.redirect('/#oidc-error=' + encodeURIComponent('OIDC is not enabled.'));
+
+    const oidcSession = req.session.oidc;
+    if (!oidcSession) return res.redirect('/#oidc-error=' + encodeURIComponent('Session expired. Please try again.'));
+
+    const client = await getOidcClient(settings);
+    const params = client.callbackParams(req);
+
+    const tokenSet = await client.callback(settings.redirect_uri, params, {
+      code_verifier: oidcSession.code_verifier,
+      state:         oidcSession.state,
+      nonce:         oidcSession.nonce,
+    });
+
+    const claims = tokenSet.claims();
+    const sub    = claims.sub;
+    const issuer = claims.iss;
+
+    delete req.session.oidc;
+
+    // Self-service linking flow
+    if (oidcSession.linking && oidcSession.linkUserId) {
+      const existing = db.prepare(
+        'SELECT id FROM users WHERE oidc_issuer = ? AND oidc_sub = ? AND id != ?'
+      ).get(issuer, sub, oidcSession.linkUserId);
+      if (existing) {
+        return res.redirect('/#oidc-error=' + encodeURIComponent('This identity is already linked to another account.'));
+      }
+
+      db.prepare("UPDATE users SET oidc_sub = ?, oidc_issuer = ?, updated_at = datetime('now') WHERE id = ?")
+        .run(sub, issuer, oidcSession.linkUserId);
+      return res.redirect('/#oidc-linked');
+    }
+
+    // Login flow — look up user by OIDC identity
+    const user = db.prepare(
+      'SELECT id, username, role FROM users WHERE oidc_issuer = ? AND oidc_sub = ?'
+    ).get(issuer, sub);
+
+    if (!user) {
+      return res.redirect('/#oidc-error=' + encodeURIComponent(
+        'No account is linked to this identity. Ask an admin to link your account, or sign in with your password and link it yourself.'
+      ));
+    }
+
+    req.session.userId   = user.id;
+    req.session.username = user.username;
+    req.session.role     = user.role;
+
+    // Load account access into session (mirrors login behavior)
+    if (user.role !== 'admin') {
+      const accts = db.prepare('SELECT account_id, role FROM user_accounts WHERE user_id = ?').all(user.id);
+      req.session.accounts = accts;
+    }
+
+    res.redirect('/');
+  } catch (err) {
+    console.error('[oidc] callback error:', err.message);
+    res.redirect('/#oidc-error=' + encodeURIComponent('SSO login failed. Please try again.'));
+  }
+});
+
+// GET /api/auth/oidc/link — logged-in user initiates linking flow
+router.get('/oidc/link', async (req, res) => {
+  if (!req.session || !req.session.userId) {
+    return res.redirect('/#oidc-error=' + encodeURIComponent('You must be signed in to link your account.'));
+  }
+
+  try {
+    const settings = getOidcSettings();
+    if (!settings.enabled) return res.redirect('/#oidc-error=' + encodeURIComponent('OIDC is not enabled.'));
+
+    const { generators } = require('openid-client');
+    const client = await getOidcClient(settings);
+
+    const code_verifier = generators.codeVerifier();
+    const code_challenge = generators.codeChallenge(code_verifier);
+    const state = generators.state();
+    const nonce = generators.nonce();
+
+    req.session.oidc = { code_verifier, state, nonce, linking: true, linkUserId: req.session.userId };
+
+    const authUrl = client.authorizationUrl({
+      scope: 'openid email profile',
+      state,
+      nonce,
+      code_challenge,
+      code_challenge_method: 'S256',
+    });
+
+    req.session.save(() => res.redirect(authUrl));
+  } catch (err) {
+    console.error('[oidc] link error:', err.message);
+    res.redirect('/#oidc-error=' + encodeURIComponent('Failed to initiate SSO linking.'));
+  }
+});
+
+// POST /api/auth/oidc/unlink — logged-in user removes their own OIDC link
+router.post('/oidc/unlink', (req, res) => {
+  if (!req.session || !req.session.userId) {
+    return res.status(401).json({ error: 'Not authenticated.' });
+  }
+  db.prepare("UPDATE users SET oidc_sub = NULL, oidc_issuer = NULL, updated_at = datetime('now') WHERE id = ?")
+    .run(req.session.userId);
   res.json({ ok: true });
 });
 
