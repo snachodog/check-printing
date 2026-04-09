@@ -387,7 +387,7 @@ function generateDepositSlip(account, deposit, items) {
       drawAmountRow(item.amount || 0, r);
     });
 
-    drawAmountRow(checksTotal, totalRows);
+    drawAmountRow(depositTotal, totalRows);
 
     // ── Rotated left strip elements ─────────────────────────────────────────
     // All elements use rotate(90): text flows downward on the page, which reads
