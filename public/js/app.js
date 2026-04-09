@@ -201,12 +201,10 @@ function openUsersModal() {
   document.getElementById('users-list').hidden = !isAdmin;
   document.getElementById('user-form-section').hidden = !isAdmin;
   document.getElementById('smtp-settings-section').hidden = !isAdmin;
-  document.getElementById('oidc-settings-section').hidden = !isAdmin;
   if (isAdmin) {
     loadUsers();
     renderUfAccountCheckboxes();
     loadSmtpSettings();
-    loadOidcSettings();
   }
   loadOidcLinkStatus();
 }
@@ -1659,47 +1657,6 @@ async function saveSmtpSettings() {
   }
 }
 
-// ── OIDC settings ────────────────────────────────────────────────────────────
-
-async function loadOidcSettings() {
-  try {
-    const s = await apiFetch('GET', '/api/settings/oidc');
-    if (!s) return;
-    document.getElementById('oidc-enabled').value        = s.enabled ? '1' : '0';
-    document.getElementById('oidc-discovery-url').value   = s.discovery_url;
-    document.getElementById('oidc-client-id').value       = s.client_id;
-    document.getElementById('oidc-redirect-uri').value    = s.redirect_uri;
-    document.getElementById('oidc-button-label').value    = s.button_label;
-    document.getElementById('oidc-secret-hint').textContent = s.has_secret ? '(leave blank to keep)' : '';
-  } catch (_) {}
-}
-
-async function saveOidcSettings() {
-  const errEl     = document.getElementById('oidc-error');
-  const successEl = document.getElementById('oidc-success');
-  const btn       = document.getElementById('btn-save-oidc');
-  errEl.hidden = true; successEl.hidden = true;
-  btn.disabled = true;
-  try {
-    await apiFetch('PUT', '/api/settings/oidc', {
-      enabled:       document.getElementById('oidc-enabled').value === '1',
-      discovery_url: document.getElementById('oidc-discovery-url').value.trim(),
-      client_id:     document.getElementById('oidc-client-id').value.trim(),
-      client_secret: document.getElementById('oidc-client-secret').value,
-      redirect_uri:  document.getElementById('oidc-redirect-uri').value.trim(),
-      button_label:  document.getElementById('oidc-button-label').value.trim(),
-    });
-    successEl.textContent = 'Saved.'; successEl.hidden = false;
-    document.getElementById('oidc-client-secret').value = '';
-    await loadOidcSettings();
-    setTimeout(() => { successEl.hidden = true; }, 3000);
-  } catch (err) {
-    errEl.textContent = err.message; errEl.hidden = false;
-  } finally {
-    btn.disabled = false;
-  }
-}
-
 // ── OIDC self-service linking ────────────────────────────────────────────────
 
 async function loadOidcLinkStatus() {
@@ -1943,7 +1900,6 @@ async function init() {
   document.getElementById('uf-role').addEventListener('change', renderUfAccountCheckboxes);
   document.getElementById('btn-change-password').addEventListener('click', changeOwnPassword);
   document.getElementById('btn-save-smtp').addEventListener('click', saveSmtpSettings);
-  document.getElementById('btn-save-oidc').addEventListener('click', saveOidcSettings);
   document.getElementById('btn-oidc-unlink').addEventListener('click', unlinkOidc);
 
   // Add checking account

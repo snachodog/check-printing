@@ -734,48 +734,6 @@
         <div id="smtp-success" class="import-result" hidden></div>
         <button id="btn-save-smtp" class="btn-secondary" style="margin-top:8px">Save Email Settings</button>
       </div>
-      <!-- OIDC settings (admin only) -->
-      <div id="oidc-settings-section" style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
-        <h3 style="font-size:13px;font-weight:600;margin-bottom:10px">Single Sign-On (OIDC)</h3>
-        <div class="form-row">
-          <div class="form-group" style="max-width:100px">
-            <label for="oidc-enabled">Enabled</label>
-            <select id="oidc-enabled">
-              <option value="0">No</option>
-              <option value="1">Yes</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="oidc-button-label">Button Label</label>
-            <input type="text" id="oidc-button-label" placeholder="Sign in with SSO">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="oidc-discovery-url">Discovery URL</label>
-            <input type="url" id="oidc-discovery-url" placeholder="https://auth.example.com/.well-known/openid-configuration">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="oidc-client-id">Client ID</label>
-            <input type="text" id="oidc-client-id" autocomplete="off">
-          </div>
-          <div class="form-group">
-            <label for="oidc-client-secret">Client Secret <span class="field-hint" id="oidc-secret-hint"></span></label>
-            <input type="password" id="oidc-client-secret" autocomplete="new-password">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="oidc-redirect-uri">Redirect URI <span class="field-hint">(full external callback URL)</span></label>
-            <input type="url" id="oidc-redirect-uri" placeholder="https://checks.example.com/api/auth/oidc/callback">
-          </div>
-        </div>
-        <div id="oidc-error" class="wizard-error" hidden></div>
-        <div id="oidc-success" class="import-result" hidden></div>
-        <button id="btn-save-oidc" class="btn-secondary" style="margin-top:8px">Save OIDC Settings</button>
-      </div>
       <!-- Change own password -->
       <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
         <h3 style="font-size:13px;font-weight:600;margin-bottom:10px">Change My Password</h3>

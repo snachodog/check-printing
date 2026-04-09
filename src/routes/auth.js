@@ -209,27 +209,29 @@ router.post('/reset-password', async (req, res) => {
 // ── OIDC helpers ─────────────────────────────────────────────────────────────
 
 function getOidcSettings() {
-  const rows = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'oidc_%'").all();
-  const s = Object.fromEntries(rows.map(r => [r.key.replace('oidc_', ''), r.value || '']));
   return {
-    enabled:       s.enabled === '1',
-    discovery_url: s.discovery_url || '',
-    client_id:     s.client_id     || '',
-    client_secret: s.client_secret || '',
-    redirect_uri:  s.redirect_uri  || '',
-    button_label:  s.button_label  || 'Sign in with SSO',
+    enabled:       process.env.OIDC_ENABLED === '1' || process.env.OIDC_ENABLED === 'true',
+    discovery_url: process.env.OIDC_DISCOVERY_URL || '',
+    client_id:     process.env.OIDC_CLIENT_ID     || '',
+    client_secret: process.env.OIDC_CLIENT_SECRET || '',
+    redirect_uri:  process.env.OIDC_REDIRECT_URI  || '',
+    button_label:  process.env.OIDC_BUTTON_LABEL  || 'Sign in with SSO',
   };
 }
 
 async function getOidcClient(settings) {
   const { Issuer } = require('openid-client');
+  console.log('[oidc] discovering issuer from:', settings.discovery_url);
   const issuer = await Issuer.discover(settings.discovery_url);
-  return new issuer.Client({
+  console.log('[oidc] discovered issuer:', issuer.issuer);
+  const client = new issuer.Client({
     client_id:     settings.client_id,
     client_secret: settings.client_secret,
     redirect_uris: [settings.redirect_uri],
     response_types: ['code'],
   });
+  console.log('[oidc] client created, redirect_uri:', settings.redirect_uri);
+  return client;
 }
 
 // GET /api/auth/oidc/config — public, returns whether OIDC is enabled + button label
@@ -242,6 +244,8 @@ router.get('/oidc/config', (req, res) => {
 router.get('/oidc/authorize', async (req, res) => {
   try {
     const settings = getOidcSettings();
+    console.log('[oidc] authorize: enabled=%s, discovery_url=%s, client_id=%s, redirect_uri=%s',
+      settings.enabled, settings.discovery_url, settings.client_id, settings.redirect_uri);
     if (!settings.enabled) return res.status(400).json({ error: 'OIDC is not enabled.' });
 
     const { generators } = require('openid-client');
@@ -262,10 +266,11 @@ router.get('/oidc/authorize', async (req, res) => {
       code_challenge_method: 'S256',
     });
 
+    console.log('[oidc] authorize: redirecting to:', authUrl.substring(0, 200) + '...');
     // Ensure session is persisted before redirecting (saveUninitialized is false)
     req.session.save(() => res.redirect(authUrl));
   } catch (err) {
-    console.error('[oidc] authorize error:', err.message);
+    console.error('[oidc] authorize error:', err.message, err.stack);
     res.redirect('/#oidc-error=' + encodeURIComponent('Failed to initiate SSO login.'));
   }
 });
@@ -273,14 +278,21 @@ router.get('/oidc/authorize', async (req, res) => {
 // GET /api/auth/oidc/callback — handles the provider redirect
 router.get('/oidc/callback', async (req, res) => {
   try {
+    console.log('[oidc] callback: query params:', JSON.stringify(req.query));
     const settings = getOidcSettings();
     if (!settings.enabled) return res.redirect('/#oidc-error=' + encodeURIComponent('OIDC is not enabled.'));
 
     const oidcSession = req.session.oidc;
-    if (!oidcSession) return res.redirect('/#oidc-error=' + encodeURIComponent('Session expired. Please try again.'));
+    if (!oidcSession) {
+      console.error('[oidc] callback: no oidc session data found — session may have expired or cookie lost');
+      return res.redirect('/#oidc-error=' + encodeURIComponent('Session expired. Please try again.'));
+    }
+    console.log('[oidc] callback: session has oidc data, linking=%s, linkUserId=%s',
+      !!oidcSession.linking, oidcSession.linkUserId || 'n/a');
 
     const client = await getOidcClient(settings);
     const params = client.callbackParams(req);
+    console.log('[oidc] callback: exchanging code for tokens...');
 
     const tokenSet = await client.callback(settings.redirect_uri, params, {
       code_verifier: oidcSession.code_verifier,
@@ -291,20 +303,25 @@ router.get('/oidc/callback', async (req, res) => {
     const claims = tokenSet.claims();
     const sub    = claims.sub;
     const issuer = claims.iss;
+    console.log('[oidc] callback: token exchange OK, sub=%s, iss=%s, email=%s, name=%s',
+      sub, issuer, claims.email || 'n/a', claims.name || 'n/a');
 
     delete req.session.oidc;
 
     // Self-service linking flow
     if (oidcSession.linking && oidcSession.linkUserId) {
+      console.log('[oidc] callback: linking flow for userId=%s', oidcSession.linkUserId);
       const existing = db.prepare(
         'SELECT id FROM users WHERE oidc_issuer = ? AND oidc_sub = ? AND id != ?'
       ).get(issuer, sub, oidcSession.linkUserId);
       if (existing) {
+        console.warn('[oidc] callback: identity already linked to userId=%s', existing.id);
         return res.redirect('/#oidc-error=' + encodeURIComponent('This identity is already linked to another account.'));
       }
 
       db.prepare("UPDATE users SET oidc_sub = ?, oidc_issuer = ?, updated_at = datetime('now') WHERE id = ?")
         .run(sub, issuer, oidcSession.linkUserId);
+      console.log('[oidc] callback: linked sub=%s to userId=%s', sub, oidcSession.linkUserId);
       return res.redirect('/#oidc-linked');
     }
 
@@ -314,11 +331,13 @@ router.get('/oidc/callback', async (req, res) => {
     ).get(issuer, sub);
 
     if (!user) {
+      console.warn('[oidc] callback: no user found for iss=%s sub=%s — not linked', issuer, sub);
       return res.redirect('/#oidc-error=' + encodeURIComponent(
         'No account is linked to this identity. Ask an admin to link your account, or sign in with your password and link it yourself.'
       ));
     }
 
+    console.log('[oidc] callback: login success, userId=%s, username=%s, role=%s', user.id, user.username, user.role);
     req.session.userId   = user.id;
     req.session.username = user.username;
     req.session.role     = user.role;
@@ -331,7 +350,7 @@ router.get('/oidc/callback', async (req, res) => {
 
     res.redirect('/');
   } catch (err) {
-    console.error('[oidc] callback error:', err.message);
+    console.error('[oidc] callback error:', err.message, err.stack);
     res.redirect('/#oidc-error=' + encodeURIComponent('SSO login failed. Please try again.'));
   }
 });
@@ -343,6 +362,7 @@ router.get('/oidc/link', async (req, res) => {
   }
 
   try {
+    console.log('[oidc] link: userId=%s initiating linking flow', req.session.userId);
     const settings = getOidcSettings();
     if (!settings.enabled) return res.redirect('/#oidc-error=' + encodeURIComponent('OIDC is not enabled.'));
 
@@ -364,9 +384,10 @@ router.get('/oidc/link', async (req, res) => {
       code_challenge_method: 'S256',
     });
 
+    console.log('[oidc] link: redirecting to provider');
     req.session.save(() => res.redirect(authUrl));
   } catch (err) {
-    console.error('[oidc] link error:', err.message);
+    console.error('[oidc] link error:', err.message, err.stack);
     res.redirect('/#oidc-error=' + encodeURIComponent('Failed to initiate SSO linking.'));
   }
 });
