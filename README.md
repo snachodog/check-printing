@@ -1,138 +1,198 @@
 # check-printing
 
-Self-hosted web app for printing checks and bank deposit slips. A containerized Node.js web app accessible on the local network.
+Self-hosted web app for printing checks and bank deposit slips on blank check stock. Runs as a containerized Node.js app accessible on your local network or behind a reverse proxy.
+
+## Features
+
+- Check ledger with search, filtering, and sorting
+- Precise 3-up check PDFs (three checks per 8.5" x 11" letter page, multi-page supported)
+- MICR E-13B encoding for routing/account lines (GnuMICR font, GPL-2.0)
+- Bank deposit slips with digit-column formatting and MICR line
+- Deposit reports for filing
+- Visual drag-and-drop check layout editor
+- Multi-account support with per-user access control
+- OIDC / SSO login (OpenID Connect)
+- Password reset via email (SMTP)
+- QBO CSV import for checks and deposits
+- ezCheckPrinting .mdb import
 
 ## Stack
 
 - **Runtime:** Node.js 20
 - **Framework:** Express 4
 - **Database:** SQLite via `better-sqlite3`
-- **PDF generation:** PDFKit with embedded GnuMICR E-13B font (GPL-2.0)
+- **PDF generation:** PDFKit with embedded GnuMICR E-13B font
 - **Frontend:** Vanilla JS, no framework
-- **Container:** Docker Compose pulling from Docker Hub
+- **Container:** Docker Compose pulling from Docker Hub (`dogiakos/check-printing`)
 
 ## Getting started
 
 ### Production (Docker)
+
+1. Create a `.env` file (see `.env.example`):
+
+```bash
+SESSION_SECRET=$(openssl rand -hex 32)
+```
+
+2. Start the container:
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-On first launch, the app detects no users are configured and opens a **setup wizard** in the browser. Create the first admin account, then configure checkwriter info, bank info, and account/routing numbers. If you have an existing ezCheckPrinting `.mdb` file, click **Import .mdb** instead.
+3. Open the app in your browser. On first launch, create the initial admin account when prompted.
+
+4. Use the setup wizard to configure your first checking account (organization info, bank info, routing/account numbers), or import an existing ezCheckPrinting `.mdb` file.
 
 ### Development (local)
 
 ```bash
 npm install
-npm run dev        # nodemon src/app.js
+cp .env.example .env   # edit .env with your values
+npm run dev             # nodemon with --env-file=.env
 ```
 
-## Authentication and user roles
+## Authentication
 
 All access requires login. The first run prompts you to create an admin account.
 
-Three roles are available:
+### Roles
 
 | Role | Access |
 | --- | --- |
-| **admin** | Full access to all accounts; create/edit/delete users and accounts |
-| **editor** | Read and write access to assigned accounts |
-| **viewer** | Read-only access to assigned accounts |
+| **Admin** | Full access to all accounts; manage users, accounts, and app settings |
+| **Editor** | Read and write access to assigned accounts |
+| **Viewer** | Read-only access to assigned accounts |
 
-Admins have editor access to all accounts automatically. Non-admin users are assigned per-account roles individually. User management is available in the **Users** panel (admin only). Any user can change their own password from the account menu.
+Admins have editor access to all accounts automatically. Non-admin users are assigned per-account roles individually.
+
+### User management
+
+Available in the **Manage Users** panel (admin only):
+
+- Create, edit, and delete users
+- Assign per-account roles
+- Configure SMTP for password reset emails
+- Link/unlink OIDC identities
+
+Any user can change their own password and link/unlink their OIDC identity from the account menu (click your username in the header).
+
+### OIDC / SSO
+
+OIDC login is configured via environment variables (see below). When enabled, a **Sign in with SSO** button appears on the login page.
+
+Users must link their local account to their OIDC identity before SSO login will work. Two ways to link:
+
+1. **Self-service:** Sign in with your password, click your username, then click **Link My Account** in the Single Sign-On section
+2. **Admin:** Edit a user in the Manage Users panel and set the OIDC Subject and Issuer fields
+
+OIDC uses the authorization code flow with PKCE. The provider must have the redirect URI registered: `https://your-app.example.com/api/auth/oidc/callback`
 
 ## Multi-account support
 
-The app supports multiple checking accounts in a single instance. Each account has its own check ledger, deposit records, and layout configuration. Admins can create, edit, and delete accounts. Deleting an account removes all associated checks, deposits, and layout data.
+The app supports multiple checking accounts in a single instance. Each account has its own check ledger, deposit records, and layout configuration. Use the account switcher in the header to switch between accounts. Admins can create, edit, and delete accounts.
 
-## Printing
+## Checks
 
-1. Select 1–3 checks from the ledger (checkbox column)
+1. Select 1 or more checks from the ledger (checkbox column)
 2. Click **Generate PDF**
-3. A 3-up 8.5"×11" PDF opens in a new tab — three 3.5" check slots per page
-4. Print from the browser; checks are marked as printed in the ledger
+3. A 3-up 8.5" x 11" PDF opens in a new tab
+4. Print from the browser; checks are marked as printed
 
-Use the **Reprint** button on printed checks to regenerate without re-marking them.
+Use **Reprint** on printed checks to regenerate without re-marking.
 
-Multi-page PDFs are supported when more than 3 checks are selected.
+### Check layout
+
+- Page: 8.5" x 11", zero margins
+- Three check slots of 3.5" each
+- MICR line at 0.267" from bottom of each slot
+- MICR format: `A{routing}A {account}C {checkNo}A` (GnuMICR E-13B encoding)
 
 ## Deposit slips
 
-Switch to the **Deposits** tab in the toolbar to manage bank deposits.
+1. Switch to the **Deposits** tab
+2. Click **+ New Deposit**
+3. Enter deposit date, currency, coin, and cash back amounts
+4. Add each check (check number, payee, memo, amount) -- totals update live
+5. **Save Deposit**, then click **Deposit Slip** or **Report** to generate a PDF
 
-1. Click **+ New Deposit** to open the deposit entry panel
-2. Enter the deposit date, currency, coin, and cash back amounts
-3. Add each check being deposited (check number, payee, memo, amount) — totals update live
-4. Click **Save Deposit**, then **Deposit Slip** or **Report** to generate a PDF
+**Deposit Slip** generates a 3.375" x 8.5" PDF matching physical bank deposit slip stock with digit-column formatting, MICR line, and rotated totals.
 
-**Deposit Slip** generates a precisely positioned 3.375" × 8.5" PDF matching physical bank deposit slip stock, including:
+**Deposit Report** generates a plain formatted ledger document for filing.
 
-- Style A background (form lines and labels drawn server-side — no preprinted stock required)
-- Digit-column amount formatting
-- Routing/account line in E-13B magnetic ink character recognition font, rotated 90°
-- Rotated deposit total and check count in the left margin
+## Visual layout editor
 
-**Deposit Report** generates a plain formatted ledger document listing all checks, cash totals, and the final deposit amount — suitable for filing.
+Click the **layout** button in the header (editors and above) to open the layout editor.
 
-Generating a deposit slip marks the deposit as printed in the ledger.
+- Full-screen canvas with inch rulers
+- Drag any check element to reposition it
+- Position readout in inches and fractions with nudge buttons
+- Visibility toggle to hide fields from PDFs
+- Auto-saves on change
+- **Reset to Defaults** restores the built-in layout
 
-## Importing from QuickBooks Online (QBO CSV)
+## Importing
 
-Checks and deposits can be imported from a QuickBooks Online CSV export. Click **Import QBO CSV** in the toolbar, select the file, choose whether to import checks or deposits, and review the parsed records before confirming.
+### QuickBooks Online (QBO CSV)
 
-The importer handles:
+Click **Import QBO** in the toolbar. Supports standard QBO export columns, automatic type filtering (checks vs. deposits), duplicate detection, and auto-numbering.
 
-- Standard QBO export column layouts (`Date`, `Transaction Type`, `Num`, `Name`, `Memo/Description`, `Amount`, `Debit`, `Credit`)
-- Automatic type filtering — checks are matched by transaction type `Check`, deposits by `Deposit`
-- Duplicate detection — existing check numbers are skipped
-- Auto-assignment of check numbers when the source CSV has no `Num` value
-- Grouping of deposit rows by date into individual deposit records
+### ezCheckPrinting (.mdb)
 
-## Importing from ezCheckPrinting (.mdb)
+**Via the UI:** Click **Import .mdb** in the toolbar, select the file, and click Import.
 
-Two ways to import:
-
-**Via the UI (recommended):** Click **Import .mdb** in the toolbar, select the file, and click Import. The server runs the migration and shows the log output.
-
-**Via CLI** (inside the container or locally with `mdbtools` installed):
+**Via CLI** (inside the container):
 
 ```bash
 docker exec -it check-printing node migrations/import-mdb.js \
   --file "/app/data/YourAccount.mdb"
 
 # Preview without writing:
-node migrations/import-mdb.js --file YourAccount.mdb --dry-run
+docker exec -it check-printing node migrations/import-mdb.js \
+  --file "/app/data/YourAccount.mdb" --dry-run
 ```
-
-The script imports account config (T100), logo (Settings), check layout (T200), and check history (T104).
-
-## Visual layout editor
-
-Each account has an independently configurable check layout. Click the **⊞** button in the header (editors and above only) to open the layout editor.
-
-- Full-screen canvas showing a single check slot at scale, with inch rulers on all edges
-- All check elements are draggable — click to select, drag to reposition
-- Selected field shows position in inches and fractions (¼, ½, ⅛, etc.) with numeric inputs and ±1/16" nudge buttons
-- Line fields (payee line, amount box, memo line, signature line) can be repositioned as a unit
-- Visibility toggle hides a field from PDFs without deleting it
-- Auto-saves 600 ms after any change; immediate save on drag release
-- **Reset to Defaults** restores the built-in layout for that account
-
-The canvas renders actual check content at proportional size — company name, bank info, sample payee and amount — so positioning is WYSIWYG.
-
-## Check layout
-
-- Page: 8.5" × 11", zero margins
-- Three check slots of 3.5" each; remaining ~0.5" is tear-off strip
-- MICR line at 0.267" from bottom of each slot
-- MICR format: `A{routing}A {account}C {checkNo}A` (GnuMICR E-13B encoding)
 
 ## Environment variables
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `PORT` | `3000` | HTTP port |
-| `DB_PATH` | `/app/data/check-printing.db` | SQLite database path |
-| `SESSION_SECRET` | *(random)* | Secret for signing session cookies — set explicitly in production |
+| `SESSION_SECRET` | *(required)* | Secret for signing session cookies. Generate with `openssl rand -hex 32` |
+| `SESSION_MAX_AGE_HOURS` | `168` | Session lifetime in hours (default 7 days) |
+| `PORT` | `3000` | HTTP listen port |
+| `DB_PATH` | `/app/data/check-printing.db` | SQLite database file path |
+| `OIDC_ENABLED` | *(empty)* | Set to `true` or `1` to enable OIDC login |
+| `OIDC_DISCOVERY_URL` | *(empty)* | Provider's `.well-known/openid-configuration` URL |
+| `OIDC_CLIENT_ID` | *(empty)* | OIDC client ID |
+| `OIDC_CLIENT_SECRET` | *(empty)* | OIDC client secret |
+| `OIDC_REDIRECT_URI` | *(empty)* | Full callback URL, e.g. `https://checks.example.com/api/auth/oidc/callback` |
+| `OIDC_BUTTON_LABEL` | `Sign in with SSO` | Text shown on the SSO login button |
+
+SMTP settings for password reset emails are configured in the admin UI (Manage Users > Email Settings).
+
+## Docker Compose
+
+```yaml
+services:
+  check-printing:
+    image: dogiakos/check-printing:latest
+    container_name: check-printing
+    restart: unless-stopped
+    ports:
+      - "3003:3000"
+    volumes:
+      - check-printing-data:/app/data
+    environment:
+      - SESSION_SECRET=${SESSION_SECRET}
+      # Optional: OIDC / SSO
+      - OIDC_ENABLED=${OIDC_ENABLED:-}
+      - OIDC_DISCOVERY_URL=${OIDC_DISCOVERY_URL:-}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
+      - OIDC_REDIRECT_URI=${OIDC_REDIRECT_URI:-}
+      - OIDC_BUTTON_LABEL=${OIDC_BUTTON_LABEL:-Sign in with SSO}
+
+volumes:
+  check-printing-data:
+```
