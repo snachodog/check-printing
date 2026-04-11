@@ -106,7 +106,7 @@ app.put('/api/account/:id', requireAdmin, (req, res) => {
     bank_name, bank_info1, bank_info2, bank_info3, transit_code,
     routing_number, account_number,
     offset_left, offset_right, offset_up, offset_down,
-    logo_data, second_signature,
+    logo_data, second_signature, check_position,
   } = req.body;
 
   if (!company1 || !routing_number || !account_number) {
@@ -117,13 +117,16 @@ app.put('/api/account/:id', requireAdmin, (req, res) => {
     return res.status(400).json({ error: 'Logo image must be smaller than 512 KB.' });
   }
 
+  const VALID_POSITIONS = ['3-per-page', 'top', 'middle', 'bottom'];
+  const resolvedPosition = VALID_POSITIONS.includes(check_position) ? check_position : '3-per-page';
+
   db.prepare(`
     UPDATE account SET
       company1 = ?, company2 = ?, company3 = ?, company4 = ?,
       bank_name = ?, bank_info1 = ?, bank_info2 = ?, bank_info3 = ?, transit_code = ?,
       routing_number = ?, account_number = ?,
       offset_left = ?, offset_right = ?, offset_up = ?, offset_down = ?,
-      second_signature = ?,
+      second_signature = ?, check_position = ?,
       logo_data = CASE WHEN ? IS NOT NULL THEN ? ELSE logo_data END,
       updated_at = datetime('now')
     WHERE id = ?
@@ -133,7 +136,7 @@ app.put('/api/account/:id', requireAdmin, (req, res) => {
     routing_number, account_number,
     parseFloat(offset_left) || 0, parseFloat(offset_right) || 0,
     parseFloat(offset_up) || 0, parseFloat(offset_down) || 0,
-    second_signature ? 1 : 0,
+    second_signature ? 1 : 0, resolvedPosition,
     logo_data || null, logo_data || null,
     req.params.id
   );

@@ -160,6 +160,8 @@ db.exec(`
 
 // Default layout fields used for seeding and migration.
 const DEFAULT_LAYOUT_FIELDS = [
+    // Logo — top left corner (Graph type, rendered as image from account.logo_data)
+    { field_name: 'Logo',          field_type: 'Graph',   x_pos: 0.10, y_pos: 0.08, x_end_pos: 0.45, y_end_pos: 0.58, font_name: 'Helvetica', font_size: 10, font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
     // Company block — top left
     { field_name: 'Company Name',  field_type: 'Regular', x_pos: 0.50, y_pos: 0.12, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica-Bold', font_size: 10, font_bold: 1, field_text: null, line_thick: 1, visible: 1 },
     { field_name: 'Company Name2', field_type: 'Regular', x_pos: 0.50, y_pos: 0.30, x_end_pos: 0, y_end_pos: 0, font_name: 'Helvetica',      font_size: 9,  font_bold: 0, field_text: null, line_thick: 1, visible: 1 },
@@ -226,6 +228,21 @@ if (!db.prepare("SELECT value FROM settings WHERE key = 'layout_reset_v1'").get(
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('layout_reset_v1', '1')").run();
   })();
 }
+
+// Migration: add Logo field to existing accounts that don't have one.
+(function addLogoField() {
+  const accounts = db.prepare('SELECT id FROM account').all();
+  const insertLogo = db.prepare(`
+    INSERT OR IGNORE INTO layout_fields
+      (account_id, field_name, field_text, font_name, font_size, font_bold,
+       field_type, line_thick, x_pos, y_pos, x_end_pos, y_end_pos, visible)
+    VALUES (?, 'Logo', NULL, 'Helvetica', 10, 0, 'Graph', 1, 0.10, 0.08, 0.45, 0.58, 1)
+  `);
+  for (const { id } of accounts) {
+    const existing = db.prepare("SELECT id FROM layout_fields WHERE account_id = ? AND field_name = 'Logo'").get(id);
+    if (!existing) insertLogo.run(id);
+  }
+})();
 
 // Migration: seed default layout fields for any account that has none (ongoing, idempotent).
 (function seedMissingLayoutFields() {
