@@ -65,7 +65,8 @@ async function checkAuth() {
     return false;
   }
   if (location.hash === '#oidc-linked') {
-    history.replaceState(null, '', location.pathname);
+    // After OIDC link callback, navigate to SSO settings panel
+    location.hash = '#settings/sso';
     // Fall through to normal auth check — user is still logged in
   }
 
@@ -75,6 +76,8 @@ async function checkAuth() {
     state.user = await res.json();
     hideLoginOverlay();
     applyRoleUI();
+    // Route to settings page if hash says so
+    if (location.hash.startsWith('#settings')) handleHashRoute();
     return true;
   }
   // No session — check if this is first-run (no users at all)
@@ -165,6 +168,9 @@ async function logout() {
   document.getElementById('login-error').hidden = true;
   document.getElementById('login-setup-section').hidden = true;
   document.getElementById('login-form-section').hidden  = false;
+  // Ensure settings page is hidden and main app restored
+  document.getElementById('settings-page').hidden = true;
+  document.getElementById('main-app').hidden = false;
   showLoginOverlay();
 }
 
@@ -176,8 +182,9 @@ function applyRoleUI() {
   const isEditor = state.accountRole === 'editor' || (!state.accountRole && (role === 'admin' || role === 'editor'));
 
   document.getElementById('header-username').textContent = state.user ? state.user.username : '';
+  document.getElementById('settings-username').textContent = state.user ? state.user.username : '';
 
-  // Admin-only elements
+  // Admin-only elements (main app + settings sidebar)
   document.querySelectorAll('[data-admin-only]').forEach(el => { el.hidden = !isAdmin; });
 
   // Editor+ elements (hide for viewers)
@@ -191,28 +198,62 @@ function applyRoleUI() {
 
 let usersState = { users: [], editingId: null };
 
-function openUsersModal() {
+// ── Settings page navigation ────────────────────────────────────────────────
+
+function navigateToSettings(tab) {
   const isAdmin = state.user && state.user.role === 'admin';
-  document.getElementById('user-form-error').hidden = true;
-  document.getElementById('users-title').textContent = isAdmin ? 'Manage Users' : 'My Account';
-  document.getElementById('users-overlay').classList.add('open');
-  document.getElementById('users-modal').classList.add('open');
-  // Admin-only sections
-  document.getElementById('users-list').hidden = !isAdmin;
-  document.getElementById('user-form-section').hidden = !isAdmin;
-  document.getElementById('smtp-settings-section').hidden = !isAdmin;
-  if (isAdmin) {
-    loadUsers();
-    renderUfAccountCheckboxes();
-    loadSmtpSettings();
+  const defaultTab = isAdmin ? 'users' : 'password';
+  const resolved = tab || defaultTab;
+
+  // Guard non-admin from admin tabs
+  if (!isAdmin && (resolved === 'users' || resolved === 'smtp')) {
+    location.hash = '#settings/password';
+    return;
   }
+
+  document.getElementById('main-app').hidden = true;
+  const sp = document.getElementById('settings-page');
+  sp.hidden = false;
+  document.getElementById('settings-username').textContent = state.user ? state.user.username : '';
+
+  // Check OIDC status to show/hide SSO tab
   loadOidcLinkStatus();
+
+  activateSettingsTab(resolved);
 }
 
-function closeUsersModal() {
-  document.getElementById('users-overlay').classList.remove('open');
-  document.getElementById('users-modal').classList.remove('open');
-  cancelUserEdit();
+function activateSettingsTab(tab) {
+  // Hide all panels, show the target
+  document.querySelectorAll('.settings-panel').forEach(p => { p.hidden = true; });
+  const panel = document.getElementById('settings-panel-' + tab);
+  if (panel) panel.hidden = false;
+
+  // Update sidebar active state
+  document.querySelectorAll('.settings-nav-item').forEach(a => {
+    a.classList.toggle('active', a.dataset.settingsTab === tab);
+  });
+
+  // Load data for the activated tab
+  if (tab === 'users') { loadUsers(); renderUfAccountCheckboxes(); }
+  if (tab === 'smtp')  { loadSmtpSettings(); }
+  if (tab === 'sso')   { loadOidcLinkStatus(); }
+}
+
+function showMainApp() {
+  document.getElementById('settings-page').hidden = true;
+  document.getElementById('main-app').hidden = false;
+}
+
+function handleHashRoute() {
+  const hash = location.hash;
+  if (hash.startsWith('#settings/')) {
+    const tab = hash.split('/')[1];
+    navigateToSettings(tab);
+  } else if (hash.startsWith('#settings')) {
+    navigateToSettings();
+  } else {
+    showMainApp();
+  }
 }
 
 async function loadUsers() {
@@ -1664,9 +1705,12 @@ async function saveSmtpSettings() {
 async function loadOidcLinkStatus() {
   try {
     const cfg = await fetch('/api/auth/oidc/config').then(r => r.json());
-    const section = document.getElementById('oidc-link-section');
-    if (!cfg.enabled) { section.hidden = true; return; }
-    section.hidden = false;
+    const ssoNavItem = document.querySelector('[data-settings-tab="sso"]');
+    if (!cfg.enabled) {
+      if (ssoNavItem) ssoNavItem.hidden = true;
+      return;
+    }
+    if (ssoNavItem) ssoNavItem.hidden = false;
 
     const me = await apiFetch('GET', '/api/auth/me');
     const statusEl  = document.getElementById('oidc-link-status');
@@ -1886,11 +1930,27 @@ async function init() {
   document.getElementById('btn-reset-submit').addEventListener('click', submitResetPassword);
   document.getElementById('reset-password2').addEventListener('keydown', e => { if (e.key === 'Enter') submitResetPassword(); });
 
-  // User management
-  document.getElementById('btn-users').addEventListener('click', openUsersModal);
-  document.getElementById('header-username').addEventListener('click', openUsersModal);
-  document.getElementById('btn-close-users').addEventListener('click', closeUsersModal);
-  document.getElementById('users-overlay').addEventListener('click', closeUsersModal);
+  // User management / settings page
+  document.getElementById('btn-users').addEventListener('click', () => { location.hash = '#settings/users'; });
+  document.getElementById('header-username').addEventListener('click', () => {
+    const isAdmin = state.user && state.user.role === 'admin';
+    location.hash = isAdmin ? '#settings/users' : '#settings/password';
+  });
+  document.getElementById('settings-back-link').addEventListener('click', e => {
+    e.preventDefault();
+    location.hash = '';
+  });
+  document.getElementById('btn-settings-logout').addEventListener('click', () => {
+    location.hash = '';
+    logout();
+  });
+  // Sidebar tab navigation
+  document.querySelectorAll('.settings-nav-item').forEach(a => {
+    a.addEventListener('click', e => { e.preventDefault(); location.hash = a.getAttribute('href'); });
+  });
+  window.addEventListener('hashchange', () => {
+    if (state.user) handleHashRoute();
+  });
   document.getElementById('users-list').addEventListener('click', e => {
     const editBtn   = e.target.closest('.user-btn-edit');
     const deleteBtn = e.target.closest('.user-btn-delete');

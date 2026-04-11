@@ -87,6 +87,169 @@
     </div>
   </div>
 
+  <!-- Settings page (full-page, hidden by default) -->
+  <div id="settings-page" class="settings-page" hidden>
+    <header class="settings-header">
+      <div class="settings-header-left">
+        <a href="#" id="settings-back-link" class="settings-back-link">&larr; Back</a>
+      </div>
+      <div class="settings-header-right">
+        <span id="settings-username" class="header-username"></span>
+        <button id="btn-settings-logout" class="btn-header-icon" title="Sign out">↩</button>
+      </div>
+    </header>
+    <div class="settings-layout">
+      <nav class="settings-sidebar">
+        <div class="settings-sidebar-title">Settings</div>
+        <div class="settings-nav-group" data-admin-only>
+          <div class="settings-nav-label">Administration</div>
+          <a href="#settings/users" class="settings-nav-item" data-settings-tab="users">Users</a>
+          <a href="#settings/smtp" class="settings-nav-item" data-settings-tab="smtp">Email (SMTP)</a>
+        </div>
+        <div class="settings-nav-group">
+          <div class="settings-nav-label">Account</div>
+          <a href="#settings/password" class="settings-nav-item" data-settings-tab="password">Password</a>
+          <a href="#settings/sso" class="settings-nav-item" data-settings-tab="sso">Single Sign-On</a>
+        </div>
+      </nav>
+      <main class="settings-content">
+
+        <!-- Users panel (admin only) -->
+        <div id="settings-panel-users" class="settings-panel" hidden>
+          <h2>Users</h2>
+          <p class="settings-desc">Manage user accounts and access permissions.</p>
+          <div class="settings-section">
+            <div id="users-list"></div>
+          </div>
+          <div class="settings-section" id="user-form-section">
+            <h3 id="user-form-title">Add User</h3>
+            <div class="form-row">
+              <div class="form-group required">
+                <label for="uf-username">Username</label>
+                <input type="text" id="uf-username" autocapitalize="none">
+              </div>
+              <div class="form-group">
+                <label for="uf-email">Email <span class="field-hint">(for password reset)</span></label>
+                <input type="email" id="uf-email" autocomplete="email">
+              </div>
+              <div class="form-group required">
+                <label for="uf-password">Password <span class="field-hint" id="uf-password-hint">(min 10 chars, include a digit or symbol)</span></label>
+                <input type="password" id="uf-password" autocomplete="new-password">
+              </div>
+              <div class="form-group required">
+                <label for="uf-role">Role</label>
+                <select id="uf-role">
+                  <option value="viewer">Viewer</option>
+                  <option value="editor">Editor</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group" id="uf-accounts-group">
+              <label>Account Access <span class="field-hint">(admins see all — no selection needed)</span></label>
+              <div id="uf-accounts-checkboxes" class="account-checkboxes"></div>
+            </div>
+            <div id="uf-oidc-group" class="form-row" hidden>
+              <div class="form-group">
+                <label for="uf-oidc-sub">OIDC Subject <span class="field-hint">(sub claim from provider)</span></label>
+                <input type="text" id="uf-oidc-sub" autocomplete="off">
+              </div>
+              <div class="form-group">
+                <label for="uf-oidc-issuer">OIDC Issuer <span class="field-hint">(provider URL)</span></label>
+                <input type="text" id="uf-oidc-issuer" autocomplete="off">
+              </div>
+            </div>
+            <div id="user-form-error" class="wizard-error" hidden></div>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button id="btn-save-user" class="btn-primary">Add User</button>
+              <button id="btn-cancel-user-edit" class="btn-ghost" hidden>Cancel</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SMTP panel (admin only) -->
+        <div id="settings-panel-smtp" class="settings-panel" hidden>
+          <h2>Email Settings</h2>
+          <p class="settings-desc">Configure SMTP for password reset emails.</p>
+          <div class="settings-section" id="smtp-settings-section">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="smtp-host">SMTP Host</label>
+                <input type="text" id="smtp-host" placeholder="smtp.example.com">
+              </div>
+              <div class="form-group" style="max-width:100px">
+                <label for="smtp-port">Port</label>
+                <input type="number" id="smtp-port" value="587" min="1" max="65535">
+              </div>
+              <div class="form-group" style="max-width:160px">
+                <label for="smtp-secure">Encryption</label>
+                <select id="smtp-secure">
+                  <option value="0">STARTTLS (587)</option>
+                  <option value="1">SSL/TLS (465)</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="smtp-user">Username</label>
+                <input type="text" id="smtp-user" autocomplete="off">
+              </div>
+              <div class="form-group">
+                <label for="smtp-pass">Password <span class="field-hint" id="smtp-pass-hint"></span></label>
+                <input type="password" id="smtp-pass" autocomplete="new-password">
+              </div>
+              <div class="form-group">
+                <label for="smtp-from">From Address</label>
+                <input type="email" id="smtp-from" placeholder="ezcheck@example.com">
+              </div>
+            </div>
+            <div id="smtp-error" class="wizard-error" hidden></div>
+            <div id="smtp-success" class="import-result" hidden></div>
+            <button id="btn-save-smtp" class="btn-secondary" style="margin-top:12px">Save Email Settings</button>
+          </div>
+        </div>
+
+        <!-- Password panel (all users) -->
+        <div id="settings-panel-password" class="settings-panel" hidden>
+          <h2>Change Password</h2>
+          <p class="settings-desc">Update your login password.</p>
+          <div class="settings-section">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="cp-current">Current Password</label>
+                <input type="password" id="cp-current" autocomplete="current-password">
+              </div>
+              <div class="form-group">
+                <label for="cp-new">New Password <span class="field-hint">(min 10 chars, include a digit or symbol)</span></label>
+                <input type="password" id="cp-new" autocomplete="new-password">
+              </div>
+              <div class="form-group">
+                <label for="cp-confirm">Confirm New</label>
+                <input type="password" id="cp-confirm" autocomplete="new-password">
+              </div>
+            </div>
+            <div id="cp-error" class="wizard-error" hidden></div>
+            <div id="cp-success" class="import-result" hidden>Password changed.</div>
+            <button id="btn-change-password" class="btn-secondary" style="margin-top:12px">Change Password</button>
+          </div>
+        </div>
+
+        <!-- SSO panel (all users, shown when OIDC enabled) -->
+        <div id="settings-panel-sso" class="settings-panel" hidden>
+          <h2>Single Sign-On</h2>
+          <p class="settings-desc">Link your account to an external identity provider.</p>
+          <div class="settings-section" id="oidc-link-section">
+            <p id="oidc-link-status" class="settings-desc" style="margin-bottom:12px"></p>
+            <a id="btn-oidc-link" href="/api/auth/oidc/link" class="btn-secondary" style="display:inline-block;text-decoration:none">Link My Account</a>
+            <button id="btn-oidc-unlink" class="btn-ghost" style="margin-left:8px" hidden>Unlink</button>
+          </div>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <div id="main-app">
   <header>
     <div class="header-left">
       <span class="header-brand" id="company-name">ezcheck</span>
@@ -657,128 +820,8 @@
       </div>
     </div>
   </aside>
+  </div><!-- /main-app -->
 
-  <!-- User management modal (admin only) -->
-  <div id="users-overlay" class="modal-overlay"></div>
-  <div id="users-modal" class="modal modal-wide" role="dialog" aria-labelledby="users-title">
-    <div class="modal-header">
-      <h2 id="users-title">Manage Users</h2>
-      <button id="btn-close-users" class="btn-icon" title="Close">×</button>
-    </div>
-    <div class="modal-body">
-      <div id="users-list"></div>
-      <div id="user-form-section" style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
-        <h3 style="font-size:13px;font-weight:600;margin-bottom:10px" id="user-form-title">Add User</h3>
-        <div class="form-row">
-          <div class="form-group required">
-            <label for="uf-username">Username</label>
-            <input type="text" id="uf-username" autocapitalize="none">
-          </div>
-          <div class="form-group">
-            <label for="uf-email">Email <span class="field-hint">(for password reset)</span></label>
-            <input type="email" id="uf-email" autocomplete="email">
-          </div>
-          <div class="form-group required">
-            <label for="uf-password">Password <span class="field-hint" id="uf-password-hint">(min 10 chars, include a digit or symbol)</span></label>
-            <input type="password" id="uf-password" autocomplete="new-password">
-          </div>
-          <div class="form-group required">
-            <label for="uf-role">Role</label>
-            <select id="uf-role">
-              <option value="viewer">Viewer</option>
-              <option value="editor">Editor</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-group" id="uf-accounts-group">
-          <label>Account Access <span class="field-hint">(admins see all — no selection needed)</span></label>
-          <div id="uf-accounts-checkboxes" class="account-checkboxes"></div>
-        </div>
-        <div id="uf-oidc-group" class="form-row" hidden>
-          <div class="form-group">
-            <label for="uf-oidc-sub">OIDC Subject <span class="field-hint">(sub claim from provider)</span></label>
-            <input type="text" id="uf-oidc-sub" autocomplete="off">
-          </div>
-          <div class="form-group">
-            <label for="uf-oidc-issuer">OIDC Issuer <span class="field-hint">(provider URL)</span></label>
-            <input type="text" id="uf-oidc-issuer" autocomplete="off">
-          </div>
-        </div>
-        <div id="user-form-error" class="wizard-error" hidden></div>
-        <div style="display:flex;gap:8px;margin-top:8px">
-          <button id="btn-save-user" class="btn-primary">Add User</button>
-          <button id="btn-cancel-user-edit" class="btn-ghost" hidden>Cancel</button>
-        </div>
-      </div>
-      <!-- SMTP settings (admin only) -->
-      <div id="smtp-settings-section" style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
-        <h3 style="font-size:13px;font-weight:600;margin-bottom:10px">Email Settings (SMTP)</h3>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="smtp-host">SMTP Host</label>
-            <input type="text" id="smtp-host" placeholder="smtp.example.com">
-          </div>
-          <div class="form-group" style="max-width:90px">
-            <label for="smtp-port">Port</label>
-            <input type="number" id="smtp-port" value="587" min="1" max="65535">
-          </div>
-          <div class="form-group" style="max-width:140px">
-            <label for="smtp-secure">Encryption</label>
-            <select id="smtp-secure">
-              <option value="0">STARTTLS (587)</option>
-              <option value="1">SSL/TLS (465)</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="smtp-user">Username</label>
-            <input type="text" id="smtp-user" autocomplete="off">
-          </div>
-          <div class="form-group">
-            <label for="smtp-pass">Password <span class="field-hint" id="smtp-pass-hint"></span></label>
-            <input type="password" id="smtp-pass" autocomplete="new-password">
-          </div>
-          <div class="form-group">
-            <label for="smtp-from">From Address</label>
-            <input type="email" id="smtp-from" placeholder="ezcheck@example.com">
-          </div>
-        </div>
-        <div id="smtp-error" class="wizard-error" hidden></div>
-        <div id="smtp-success" class="import-result" hidden></div>
-        <button id="btn-save-smtp" class="btn-secondary" style="margin-top:8px">Save Email Settings</button>
-      </div>
-      <!-- Change own password -->
-      <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
-        <h3 style="font-size:13px;font-weight:600;margin-bottom:10px">Change My Password</h3>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="cp-current">Current Password</label>
-            <input type="password" id="cp-current" autocomplete="current-password">
-          </div>
-          <div class="form-group">
-            <label for="cp-new">New Password <span class="field-hint">(min 10 chars, include a digit or symbol)</span></label>
-            <input type="password" id="cp-new" autocomplete="new-password">
-          </div>
-          <div class="form-group">
-            <label for="cp-confirm">Confirm New</label>
-            <input type="password" id="cp-confirm" autocomplete="new-password">
-          </div>
-        </div>
-        <div id="cp-error" class="wizard-error" hidden></div>
-        <div id="cp-success" class="import-result" hidden>Password changed.</div>
-        <button id="btn-change-password" class="btn-secondary" style="margin-top:8px">Change Password</button>
-      </div>
-      <!-- Link my OIDC identity (self-service, shown when OIDC is enabled) -->
-      <div id="oidc-link-section" style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px" hidden>
-        <h3 style="font-size:13px;font-weight:600;margin-bottom:10px">Single Sign-On</h3>
-        <p id="oidc-link-status" style="font-size:12px;color:var(--text-muted);margin-bottom:8px"></p>
-        <a id="btn-oidc-link" href="/api/auth/oidc/link" class="btn-secondary" style="display:inline-block;text-decoration:none">Link My Account</a>
-        <button id="btn-oidc-unlink" class="btn-ghost" style="margin-left:8px" hidden>Unlink</button>
-      </div>
-    </div>
-  </div>
 
   <!-- Layout Editor Modal -->
   <div id="layout-editor-overlay" class="modal-overlay"></div>
