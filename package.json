@@ -1,6 +1,6 @@
 {
   "name": "ezcheck",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Self-hosted check printing web app",
   "main": "src/app.js",
   "scripts": {
