@@ -149,14 +149,17 @@
               <label>Account Access <span class="field-hint">(admins see all — no selection needed)</span></label>
               <div id="uf-accounts-checkboxes" class="account-checkboxes"></div>
             </div>
-            <div id="uf-oidc-group" class="form-row" hidden>
-              <div class="form-group">
-                <label for="uf-oidc-sub">OIDC Subject <span class="field-hint">(sub claim from provider)</span></label>
-                <input type="text" id="uf-oidc-sub" autocomplete="off">
-              </div>
-              <div class="form-group">
-                <label for="uf-oidc-issuer">OIDC Issuer <span class="field-hint">(provider URL)</span></label>
-                <input type="text" id="uf-oidc-issuer" autocomplete="off">
+            <div id="uf-oidc-group" class="uf-oidc-section" hidden>
+              <h4>Single Sign-On Identity</h4>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="uf-oidc-sub">OIDC Subject <span class="field-hint">(sub claim from provider)</span></label>
+                  <input type="text" id="uf-oidc-sub" autocomplete="off">
+                </div>
+                <div class="form-group">
+                  <label for="uf-oidc-issuer">OIDC Issuer <span class="field-hint">(provider URL)</span></label>
+                  <input type="text" id="uf-oidc-issuer" autocomplete="off">
+                </div>
               </div>
             </div>
             <div id="user-form-error" class="wizard-error" hidden></div>

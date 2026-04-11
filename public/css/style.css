@@ -867,19 +867,41 @@ input[type="file"] {
 }
 
 /* ── User management ── */
-.account-checkboxes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.account-checkboxes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 6px;
+  margin-top: 4px;
+}
 .account-checkbox-label {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   font-size: 12px;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 3px 8px;
+  border-radius: 6px;
+  padding: 6px 10px;
   cursor: pointer;
+  min-height: 34px;
 }
 .account-checkbox-label:hover { border-color: var(--primary); }
+.account-checkbox-label select {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.uf-oidc-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.uf-oidc-section h4 {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: var(--text-muted);
+}
 
 /* Hide layout editor button on portrait/mobile — canvas needs landscape space */
 @media (max-width: 768px), (orientation: portrait) {
