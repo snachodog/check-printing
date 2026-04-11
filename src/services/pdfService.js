@@ -131,13 +131,21 @@ function generateCheckPdf(account, checks, fields) {
     const offX = (account.offset_right - account.offset_left);
     const offY = (account.offset_down - account.offset_up);
 
-    // Render checks in pages of 3; add a new page for each additional group
-    const pages = Math.ceil(checks.length / 3);
+    // Determine slot assignment based on check_position setting
+    const position = account.check_position || '3-per-page';
+    const SLOT_MAP = { top: 0, middle: 1, bottom: 2 };
+    const fixedSlot = SLOT_MAP[position]; // undefined for '3-per-page'
+    const checksPerPage = fixedSlot !== undefined ? 1 : 3;
+
+    const pages = Math.ceil(checks.length / checksPerPage);
     for (let page = 0; page < pages; page++) {
       if (page > 0) doc.addPage();
 
       for (let slot = 0; slot < 3; slot++) {
-      const check = checks[page * 3 + slot] || null;
+      // For fixed-slot mode, only render in the designated slot
+      if (fixedSlot !== undefined && slot !== fixedSlot) continue;
+      const checkIndex = fixedSlot !== undefined ? page : page * 3 + slot;
+      const check = checks[checkIndex] || null;
       const slotOriginY = slot * SLOT_HEIGHT_IN;
 
       // Helper: convert inches (relative to slot) to PDF points (absolute page)

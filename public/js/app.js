@@ -963,6 +963,7 @@ function openAccountSettings() {
   f.elements.offset_up.value    = a.offset_up    || 0;
   f.elements.offset_down.value  = a.offset_down  || 0;
   document.getElementById('as-second-sig').checked = !!a.second_signature;
+  document.getElementById('as-check-position').value = a.check_position || '3-per-page';
 
   document.getElementById('as-logo').value = '';
   document.getElementById('as-logo-preview').hidden = true;
@@ -1001,6 +1002,7 @@ async function saveAccountSettings() {
     offset_up:      parseFloat(f.elements.offset_up.value)    || 0,
     offset_down:      parseFloat(f.elements.offset_down.value)  || 0,
     second_signature: document.getElementById('as-second-sig').checked ? 1 : 0,
+    check_position:   document.getElementById('as-check-position').value,
     logo_data:        acctSettings.logoData || null,
   };
 
