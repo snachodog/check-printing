@@ -316,8 +316,8 @@ function renderUfAccountCheckboxes() {
     const acctRole = assignment ? assignment.role : 'viewer';
     return `<label class="account-checkbox-label">
       <input type="checkbox" name="uf-account" value="${a.id}"${checked ? ' checked' : ''}>
-      ${escHtml(a.company1 || a.bank_name || `Account ${a.id}`)}
-      <select name="uf-account-role" data-account-id="${a.id}" style="margin-left:6px;font-size:12px">
+      <span>${escHtml(a.company1 || a.bank_name || `Account ${a.id}`)}</span>
+      <select name="uf-account-role" data-account-id="${a.id}" style="font-size:12px">
         <option value="editor"${acctRole === 'editor' ? ' selected' : ''}>Editor</option>
         <option value="viewer"${acctRole === 'viewer' ? ' selected' : ''}>Viewer</option>
       </select>
