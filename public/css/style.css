@@ -869,25 +869,33 @@ input[type="file"] {
 /* ── User management ── */
 .account-checkboxes {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 6px;
   margin-top: 4px;
 }
 .account-checkbox-label {
-  display: flex;
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 12px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 6px 10px;
   cursor: pointer;
-  min-height: 34px;
+  height: 64px;
 }
 .account-checkbox-label:hover { border-color: var(--primary); }
+.account-checkbox-label input[type="checkbox"] {
+  justify-self: center;
+}
+.account-checkbox-label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
 .account-checkbox-label select {
-  margin-left: auto;
   flex-shrink: 0;
 }
 
