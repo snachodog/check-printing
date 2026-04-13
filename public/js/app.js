@@ -2082,6 +2082,12 @@ function populateLayoutDropdown() {
   ).join('');
 }
 
+// Printing safe zone for user-adjustable fields (inches). MICR is exempt.
+const SAFE_LEFT   = 11 / 64;
+const SAFE_RIGHT  = 8.5 - 11 / 64;
+const SAFE_TOP    = 13 / 64;
+const SAFE_BOTTOM = 3.5 - 0.5;
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 function svgEl(tag, attrs, text) {
   const el = document.createElementNS(SVG_NS, tag);
@@ -2104,10 +2110,40 @@ function renderLayoutCanvas() {
   // White check background
   svg.appendChild(svgEl('rect', { x:0, y:0, width:W, height:H, fill:'#fff', stroke:'#bbb', 'stroke-width':1 }));
 
+  // Grid at 1/8" increments (darker every 1/4", darkest on whole inches)
+  for (let n8 = 1; n8 < Math.ceil(8.5 * 8); n8++) {
+    const x = (n8 / 8) * SCALE;
+    if (x >= W) break;
+    const isInch = n8 % 8 === 0;
+    const isQtr = n8 % 2 === 0;
+    const stroke = isInch ? '#d0d7de' : isQtr ? '#e4e8ed' : '#f0f2f5';
+    svg.appendChild(svgEl('line', { x1:x, y1:0, x2:x, y2:H, stroke, 'stroke-width':1 }));
+  }
+  for (let n8 = 1; n8 < Math.ceil(3.5 * 8); n8++) {
+    const y = (n8 / 8) * SCALE;
+    if (y >= H) break;
+    const isInch = n8 % 8 === 0;
+    const isQtr = n8 % 2 === 0;
+    const stroke = isInch ? '#d0d7de' : isQtr ? '#e4e8ed' : '#f0f2f5';
+    svg.appendChild(svgEl('line', { x1:0, y1:y, x2:W, y2:y, stroke, 'stroke-width':1 }));
+  }
+
   // MICR reference line
   const micrY = (3.5 - 0.267) * SCALE;
   svg.appendChild(svgEl('line', { x1:0, y1:micrY, x2:W, y2:micrY, stroke:'#ccc', 'stroke-width':1, 'stroke-dasharray':'4,4' }));
   svg.appendChild(svgEl('text', { x:4, y:micrY - 3, 'font-size':9, fill:'#bbb', 'font-family':'sans-serif' }, 'MICR'));
+
+  // Safe zone outline for user-adjustable fields
+  svg.appendChild(svgEl('rect', {
+    x: SAFE_LEFT * SCALE,
+    y: SAFE_TOP * SCALE,
+    width: (SAFE_RIGHT - SAFE_LEFT) * SCALE,
+    height: (SAFE_BOTTOM - SAFE_TOP) * SCALE,
+    fill: 'none',
+    stroke: '#60a5fa',
+    'stroke-width': 1,
+    'stroke-dasharray': '3,3',
+  }));
 
   for (const f of layoutState.fields) {
     const g = createFieldSvgElement(f, SCALE, layoutState.selectedId === f.id);
@@ -2333,11 +2369,11 @@ function onLayoutDragMove(e) {
   const dy = (e.clientY - layoutDrag.mouseY) / layoutState.scale;
   const f  = layoutState.fields.find(x => x.id === layoutDrag.fieldId);
   if (!f) return;
-  f.x_pos = clampIn(round16(layoutDrag.origX  + dx), 0, 8.5);
-  f.y_pos = clampIn(round16(layoutDrag.origY  + dy), 0, 3.5);
+  f.x_pos = clampIn(round16(layoutDrag.origX  + dx), SAFE_LEFT, SAFE_RIGHT);
+  f.y_pos = clampIn(round16(layoutDrag.origY  + dy), SAFE_TOP,  SAFE_BOTTOM);
   if (layoutDrag.moveEnd) {
-    f.x_end_pos = clampIn(round16(layoutDrag.origX2 + dx), 0, 8.5);
-    f.y_end_pos = clampIn(round16(layoutDrag.origY2 + dy), 0, 3.5);
+    f.x_end_pos = clampIn(round16(layoutDrag.origX2 + dx), SAFE_LEFT, SAFE_RIGHT);
+    f.y_end_pos = clampIn(round16(layoutDrag.origY2 + dy), SAFE_TOP,  SAFE_BOTTOM);
   }
   // Update just the dragged element for smooth performance
   const svg = document.querySelector('#layout-canvas-container svg');
@@ -2364,11 +2400,11 @@ function nudgeLayoutField(dx, dy) {
   const f = layoutState.fields.find(x => x.id === layoutState.selectedId);
   if (!f) return;
   const S = 1 / 16;
-  f.x_pos = clampIn(round16(f.x_pos + dx * S), 0, 8.5);
-  f.y_pos = clampIn(round16(f.y_pos + dy * S), 0, 3.5);
+  f.x_pos = clampIn(round16(f.x_pos + dx * S), SAFE_LEFT, SAFE_RIGHT);
+  f.y_pos = clampIn(round16(f.y_pos + dy * S), SAFE_TOP,  SAFE_BOTTOM);
   if (f.field_type === 'Line' || f.field_type === 'Graph') {
-    f.x_end_pos = clampIn(round16(f.x_end_pos + dx * S), 0, 8.5);
-    f.y_end_pos = clampIn(round16(f.y_end_pos + dy * S), 0, 3.5);
+    f.x_end_pos = clampIn(round16(f.x_end_pos + dx * S), SAFE_LEFT, SAFE_RIGHT);
+    f.y_end_pos = clampIn(round16(f.y_end_pos + dy * S), SAFE_TOP,  SAFE_BOTTOM);
   }
   updateLayoutSidebar(f);
   renderLayoutCanvas();

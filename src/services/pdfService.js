@@ -235,16 +235,26 @@ function generateCheckPdf(account, checks, fields) {
       }
 
       // --- MICR line ---
+      // Anchor the second transit symbol (the 'A' after routing) at 2 59/64" from left.
+      // Routing extends left from that anchor; account + check extend right.
       const micrLine = formatMicrLine(account.routing_number, account.account_number, check.check_no);
-      const micrPos = pt(0.3, MICR_Y_IN);
+      const ANCHOR_IN = 2 + 59 / 64;
 
       if (hasMicrFont) {
-        doc.font('MICR').fontSize(12).fillColor('#000000')
-           .text(micrLine, micrPos.x, micrPos.y, { lineBreak: false });
+        doc.font('MICR').fontSize(12).fillColor('#000000');
       } else {
-        doc.font('Courier').fontSize(10).fillColor('#000000')
-           .text(micrLine, micrPos.x, micrPos.y, { lineBreak: false });
+        doc.font('Courier').fontSize(10).fillColor('#000000');
       }
+
+      // Prefix = everything up to and including the second 'A' (first A + routing + second A).
+      const secondA = micrLine.indexOf('A', 1) + 1;
+      const prefix = micrLine.slice(0, secondA);
+      const prefixWidthPts = doc.widthOfString(prefix);
+      const anchorXPts = (ANCHOR_IN + offX) * POINTS_PER_INCH;
+      const micrXPts = anchorXPts - prefixWidthPts;
+      const micrYPts = (slotOriginY + MICR_Y_IN + offY) * POINTS_PER_INCH;
+
+      doc.text(micrLine, micrXPts, micrYPts, { lineBreak: false });
 
       } // end slot loop
     } // end page loop
