@@ -378,7 +378,7 @@ function generateDepositSlip(account, deposit, items) {
 
     function drawAmountRow(amount, rowIdx) {
       const y = (rowY(rowIdx) - 0.015) * PT;
-      doc.font('Courier').fontSize(8).fillColor('#000000');
+      doc.font('Courier-Bold').fontSize(8).fillColor('#000000');
       drawDigitAmount(doc, amount, dollarsRightX, y);
     }
 
@@ -389,7 +389,7 @@ function generateDepositSlip(account, deposit, items) {
       const r = SL.firstCheckRow + i;
       const y = (rowY(r) - 0.015) * PT;
       if (item.check_no) {
-        doc.font('Courier').fontSize(7).fillColor('#000000')
+        doc.font('Courier-Bold').fontSize(7).fillColor('#000000')
            .text(String(item.check_no).slice(0, 8),
                  (SL.cX + 0.28) * PT, y,
                  { width: SL.checkNoW * PT, lineBreak: false });
@@ -557,19 +557,19 @@ function renderDepositBackPage(doc, backItems, backTotal) {
     const r = BK.firstRow + i;
     const y = (bkRowY(r) - 0.015) * PT;
     if (item.check_no) {
-      doc.font('Courier').fontSize(7).fillColor('#000000')
+      doc.font('Courier-Bold').fontSize(7).fillColor('#000000')
          .text(String(item.check_no).slice(0, 8),
                (SL.cX + 0.28) * PT, y,
                { width: SL.checkNoW * PT, lineBreak: false });
     }
     if ((item.amount || 0) > 0) {
-      doc.font('Courier').fontSize(8).fillColor('#000000');
+      doc.font('Courier-Bold').fontSize(8).fillColor('#000000');
       drawDigitAmount(doc, item.amount, dollarsRightX, y);
     }
   });
 
   // Back page total
-  doc.font('Courier').fontSize(8).fillColor('#000000');
+  doc.font('Courier-Bold').fontSize(8).fillColor('#000000');
   drawDigitAmount(doc, backTotal, dollarsRightX, (bkRowY(totalRows) - 0.015) * PT);
 
   doc.restore();
