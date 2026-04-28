@@ -679,7 +679,7 @@ input[type="file"] {
   right: 0;
   width: 560px;
   max-width: 98vw;
-  height: 100vh;
+  height: 100dvh;
   background: var(--surface);
   z-index: 101;
   box-shadow: -4px 0 24px rgba(0,0,0,0.15);
@@ -687,7 +687,7 @@ input[type="file"] {
   transition: transform 0.2s ease;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: hidden;
 }
 #deposit-panel.open { transform: translateX(0); }
 
@@ -697,6 +697,8 @@ input[type="file"] {
   flex-direction: column;
   gap: 14px;
   flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .dep-summary {
