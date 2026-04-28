@@ -44,7 +44,7 @@ const SL = {
   cX: 0.65,
 
   // ── Depositor block ───────────────────────────────────────────────────────
-  depositorY: 0.28,   // Y of company name (first depositor line)
+  depositorY: 0.42,   // Y of company name (first depositor line)
 
   // ── Date ─────────────────────────────────────────────────────────────────
   dateY:      1.38,   // Y of DATE label
@@ -88,7 +88,7 @@ const SL = {
 
   // ── Colours ───────────────────────────────────────────────────────────────
   bgLineColor:   '#333333',
-  bgLabelColor:  '#444444',
+  bgLabelColor:  '#111111',
   bgHeaderColor: '#000000',
 };
 
@@ -314,7 +314,7 @@ function generateDepositSlip(account, deposit, items) {
     doc.text('TOTAL $', SL.cX * PT, rowY(totalRows) * PT - 5, { lineBreak: false });
 
     // Top disclaimer (above grid)
-    doc.font('Helvetica').fontSize(5).fillColor('#666666')
+    doc.font('Helvetica').fontSize(5).fillColor('#333333')
        .text(
          'DEPOSITS MAY NOT BE AVAILABLE FOR IMMEDIATE WITHDRAWAL',
          SL.cX * PT, SL.disclaimerY * PT,
@@ -322,7 +322,7 @@ function generateDepositSlip(account, deposit, items) {
        );
 
     // Bottom disclaimer (below grid)
-    doc.font('Helvetica').fontSize(5).fillColor('#666666')
+    doc.font('Helvetica').fontSize(5).fillColor('#333333')
        .text(
          'Checks and other items are received for deposit subject to the provisions of the Uniform Commercial Code or any applicable collection agreements.',
          SL.cX * PT, (gridBottom + 0.05) * PT,
@@ -331,7 +331,7 @@ function generateDepositSlip(account, deposit, items) {
 
     // DEPOSIT TICKET header
     doc.font('Helvetica-Bold').fontSize(9).fillColor(SL.bgHeaderColor)
-       .text('D E P O S I T   T I C K E T', SL.cX * PT, 0.08 * PT,
+       .text('D E P O S I T   T I C K E T', SL.cX * PT, 0.20 * PT,
              { width: (SL.W - SL.cX - 0.05) * PT, align: 'center', lineBreak: false });
 
     // ── Depositor block — account info, then bank info stacked below ────────
@@ -391,7 +391,7 @@ function generateDepositSlip(account, deposit, items) {
       if (item.check_no) {
         doc.font('Courier').fontSize(7).fillColor('#000000')
            .text(String(item.check_no).slice(0, 8),
-                 (SL.cX + 0.16) * PT, y,
+                 (SL.cX + 0.28) * PT, y,
                  { width: SL.checkNoW * PT, lineBreak: false });
       }
       drawAmountRow(item.amount || 0, r);
@@ -471,8 +471,16 @@ function generateDepositSlip(account, deposit, items) {
 function renderDepositBackPage(doc, backItems, backTotal) {
   // Same slip position and width as front (slipX=0, W=3.375").
   // No left strip elements; grid starts near the top.
+  // Vertically center the grid on the 8.5" page.
+  // Grid height = (checksRow + maxChecks + 1 TOTAL row + 1 border) * rowH = 33 * 0.175 = 5.775"
+  // Allow ~0.45" above grid for title + column headers; remainder splits top/bottom.
+  const BK_GRID_HEIGHT = (1 + SL.maxChecks + 1 + 1) * SL.rowH; // 33 rows
+  const BK_TITLE_AREA  = 0.45;
+  const BK_GRID_TOP    = (SL.H - BK_GRID_HEIGHT - BK_TITLE_AREA) / 2 + BK_TITLE_AREA;
+  const BK_TITLE_Y     = (SL.H - BK_GRID_HEIGHT - BK_TITLE_AREA) / 2;
   const BK = {
-    gridTop:   0.48,
+    gridTop:   BK_GRID_TOP,
+    titleY:    BK_TITLE_Y,
     checksRow: 0,
     firstRow:  1,
     maxChecks: SL.maxChecks,  // 30
@@ -491,7 +499,7 @@ function renderDepositBackPage(doc, backItems, backTotal) {
   // ── Title ─────────────────────────────────────────────────────────────────
   doc.font('Helvetica-Bold').fontSize(9).fillColor(SL.bgHeaderColor)
      .text('A D D I T I O N A L   C H E C K   L I S T I N G',
-           SL.cX * PT, 0.10 * PT,
+           SL.cX * PT, BK.titleY * PT,
            { width: (SL.W - SL.cX - 0.05) * PT, align: 'center', lineBreak: false });
 
   // ── Grid verticals (same column positions as front) ───────────────────────
@@ -551,7 +559,7 @@ function renderDepositBackPage(doc, backItems, backTotal) {
     if (item.check_no) {
       doc.font('Courier').fontSize(7).fillColor('#000000')
          .text(String(item.check_no).slice(0, 8),
-               (SL.cX + 0.16) * PT, y,
+               (SL.cX + 0.28) * PT, y,
                { width: SL.checkNoW * PT, lineBreak: false });
     }
     if ((item.amount || 0) > 0) {
