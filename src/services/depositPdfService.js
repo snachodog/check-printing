@@ -87,7 +87,7 @@ const SL = {
   checkCountValY:   6.1,    // check count value start
 
   // ── Colours ───────────────────────────────────────────────────────────────
-  bgLineColor:   '#888888',
+  bgLineColor:   '#333333',
   bgLabelColor:  '#444444',
   bgHeaderColor: '#000000',
 };
