@@ -1482,9 +1482,9 @@ function renderDepItems() {
   const addBtn = document.getElementById('btn-add-dep-item');
   if (addBtn) {
     const count = depState.items.length;
-    addBtn.hidden    = count < 30;   // only show when already at 30 (back-page territory)
-    addBtn.disabled  = count >= 60;
-    addBtn.textContent = count >= 60 ? '+ Add Row (max 60)' : '+ Add Row (back page)';
+    addBtn.hidden   = count >= 60;  // hide once back page rows are added
+    addBtn.disabled = count >= 60;
+    addBtn.textContent = 'Add Back Page Rows';
   }
   const tbody = document.getElementById('dep-items-tbody');
   tbody.innerHTML = depState.items.map((item, i) => `
@@ -1913,8 +1913,7 @@ async function init() {
   document.getElementById('dep-panel-overlay').addEventListener('click', closeDepositPanel);
   document.getElementById('btn-save-deposit').addEventListener('click', saveDeposit);
   document.getElementById('btn-add-dep-item').addEventListener('click', () => {
-    if (depState.items.length >= 60) return;
-    depState.items.push(newDepItem());
+    while (depState.items.length < 60) depState.items.push(newDepItem());
     renderDepItems();
   });
   document.getElementById('btn-dep-slip').addEventListener('click',   () => generateDepositPdf('slip'));
