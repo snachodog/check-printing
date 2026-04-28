@@ -780,6 +780,18 @@ async function deleteCheck(id) {
   }
 }
 
+// Firefox on iOS blocks window.open(blob:) in a new tab; use a temporary <a download> instead.
+function openPdfBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
 async function generatePdf() {
   const ids = [...state.selected];
   if (ids.length === 0) return;
@@ -801,7 +813,7 @@ async function generatePdf() {
       throw new Error(err.error || res.statusText);
     }
     const blob = await res.blob();
-    window.open(URL.createObjectURL(blob), '_blank');
+    openPdfBlob(blob, 'checks.pdf');
     await loadChecks(); // refresh to show printed status
   } catch (err) {
     countSpan.textContent = savedCount;
@@ -1595,7 +1607,7 @@ async function generateDepositPdf(type) {
       throw new Error(err.error || res.statusText);
     }
     const blob = await res.blob();
-    window.open(URL.createObjectURL(blob), '_blank');
+    openPdfBlob(blob, type === 'slip' ? 'deposit-slip.pdf' : 'deposit-report.pdf');
     if (type === 'slip') await loadDeposits();
   } catch (err) {
     alert('PDF error: ' + err.message);
