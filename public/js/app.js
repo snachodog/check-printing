@@ -1442,13 +1442,17 @@ async function openDepositPanel(id = null) {
       document.getElementById('dep-coin').value     = dep.coin      || '';
       document.getElementById('dep-cashback').value = dep.cash_back || '';
       depState.items = (dep.items || []).map(it => ({ ...it }));
+      while (depState.items.length < 30) depState.items.push(newDepItem());
     } catch (err) {
       alert('Error loading deposit: ' + err.message);
       return;
     }
   } else {
-    depState.items = [newDepItem()];
+    depState.items = [];
   }
+
+  // Always start with at least 30 slots (one full deposit slip page)
+  while (depState.items.length < 30) depState.items.push(newDepItem());
 
   renderDepItems();
   recalcDepTotals();
@@ -1475,6 +1479,13 @@ function newDepItem() {
 }
 
 function renderDepItems() {
+  const addBtn = document.getElementById('btn-add-dep-item');
+  if (addBtn) {
+    const count = depState.items.length;
+    addBtn.hidden    = count < 30;   // only show when already at 30 (back-page territory)
+    addBtn.disabled  = count >= 60;
+    addBtn.textContent = count >= 60 ? '+ Add Row (max 60)' : '+ Add Row (back page)';
+  }
   const tbody = document.getElementById('dep-items-tbody');
   tbody.innerHTML = depState.items.map((item, i) => `
     <tr data-idx="${i}">
@@ -1497,6 +1508,8 @@ function renderDepItems() {
   tbody.querySelectorAll('.dep-item-remove').forEach(btn => {
     btn.addEventListener('click', () => {
       depState.items.splice(parseInt(btn.dataset.idx, 10), 1);
+      // Maintain 30-slot minimum (one full slip page)
+      while (depState.items.length < 30) depState.items.push(newDepItem());
       renderDepItems();
       recalcDepTotals();
     });
@@ -1900,6 +1913,7 @@ async function init() {
   document.getElementById('dep-panel-overlay').addEventListener('click', closeDepositPanel);
   document.getElementById('btn-save-deposit').addEventListener('click', saveDeposit);
   document.getElementById('btn-add-dep-item').addEventListener('click', () => {
+    if (depState.items.length >= 60) return;
     depState.items.push(newDepItem());
     renderDepItems();
   });
