@@ -238,7 +238,17 @@ function generateDepositSlip(account, deposit, items) {
     const depositTotal = subTotal - (deposit.cash_back || 0);
     const checkCount   = items.length;
 
-    const totalRows  = SL.firstCheckRow + SL.maxChecks;
+    // Split items: first 30 on front, up to 30 more on back
+    const frontItems  = items.slice(0, SL.maxChecks);
+    const backItems   = items.slice(SL.maxChecks, SL.maxChecks * 2);
+    const hasBackPage = backItems.some(it => (it.amount || 0) > 0 || it.check_no || it.payee);
+    const backTotal   = hasBackPage ? backItems.reduce((s, i) => s + (i.amount || 0), 0) : 0;
+
+    // When back page exists, add one extra row on front for "FROM REVERSE"
+    const fromReverseRow = hasBackPage ? SL.firstCheckRow + SL.maxChecks : null;
+    const totalRows  = fromReverseRow != null
+      ? SL.firstCheckRow + SL.maxChecks + 1
+      : SL.firstCheckRow + SL.maxChecks;
     const totalRowY_ = rowTopY(totalRows);
     const gridBottom = totalRowY_ + SL.rowH;
 
@@ -375,7 +385,7 @@ function generateDepositSlip(account, deposit, items) {
     drawAmountRow(deposit.currency || 0, SL.currencyRow);
     drawAmountRow(deposit.coin     || 0, SL.coinRow);
 
-    items.slice(0, SL.maxChecks).forEach((item, i) => {
+    frontItems.forEach((item, i) => {
       const r = SL.firstCheckRow + i;
       const y = (rowY(r) - 0.015) * PT;
       if (item.check_no) {
@@ -386,6 +396,13 @@ function generateDepositSlip(account, deposit, items) {
       }
       drawAmountRow(item.amount || 0, r);
     });
+
+    // "FROM REVERSE" row carries back-page subtotal onto the front
+    if (fromReverseRow != null) {
+      doc.font('Courier').fontSize(6).fillColor(SL.bgLabelColor)
+         .text('FROM REVERSE', SL.cX * PT, rowY(fromReverseRow) * PT - 4, { lineBreak: false });
+      drawAmountRow(backTotal, fromReverseRow);
+    }
 
     drawAmountRow(depositTotal, totalRows);
 
@@ -440,8 +457,114 @@ function generateDepositSlip(account, deposit, items) {
 
     doc.restore(); // end slip position translate
 
+    if (hasBackPage) {
+      doc.addPage();
+      renderDepositBackPage(doc, backItems, backTotal);
+    }
+
     doc.end();
   });
+}
+
+// ── Back page renderer ────────────────────────────────────────────────────────
+
+function renderDepositBackPage(doc, backItems, backTotal) {
+  // Same slip position and width as front (slipX=0, W=3.375").
+  // No left strip elements; grid starts near the top.
+  const BK = {
+    gridTop:   0.48,
+    checksRow: 0,
+    firstRow:  1,
+    maxChecks: SL.maxChecks,  // 30
+  };
+  const totalRows  = BK.firstRow + BK.maxChecks;  // "TOTAL $" row index
+
+  const bkRowTopY = r => BK.gridTop + r * SL.rowH;
+  const bkRowY    = r => BK.gridTop + r * SL.rowH + SL.rowH * 0.7;
+
+  const gridTopPt = bkRowTopY(0) * PT;
+  const gridBotPt = (bkRowTopY(totalRows) + SL.rowH) * PT;
+
+  doc.save();
+  doc.translate(SL.slipX * PT, 0);
+
+  // ── Title ─────────────────────────────────────────────────────────────────
+  doc.font('Helvetica-Bold').fontSize(9).fillColor(SL.bgHeaderColor)
+     .text('A D D I T I O N A L   C H E C K   L I S T I N G',
+           SL.cX * PT, 0.10 * PT,
+           { width: (SL.W - SL.cX - 0.05) * PT, align: 'center', lineBreak: false });
+
+  // ── Grid verticals (same column positions as front) ───────────────────────
+  const dollarsRightX  = SL.colCentsR - SL.colCentsW - SL.colDollarSep;
+  const dividerX       = (dollarsRightX - 7 * SL.digitW) * PT;
+  const dollarsCentsX  = dollarsRightX * PT;
+
+  doc.moveTo(dividerX,       gridTopPt).lineTo(dividerX,       gridBotPt).lineWidth(0.5).stroke(SL.bgLineColor);
+  doc.moveTo(dollarsCentsX,  gridTopPt).lineTo(dollarsCentsX,  gridBotPt).lineWidth(0.5).stroke(SL.bgLineColor);
+  doc.moveTo(SL.colCentsR * PT, gridTopPt).lineTo(SL.colCentsR * PT, gridBotPt).lineWidth(0.5).stroke(SL.bgLineColor);
+
+  // Column headers
+  doc.font('Helvetica').fontSize(6).fillColor(SL.bgLabelColor);
+  const hdrY = (BK.gridTop - 0.10) * PT;
+  doc.text('DOLLARS', dollarsCentsX - 7 * SL.digitW * PT, hdrY,
+           { width: 7 * SL.digitW * PT, align: 'center', lineBreak: false });
+  doc.text('CENTS', (SL.colCentsR - SL.colCentsW) * PT, hdrY,
+           { width: SL.colCentsW * PT, align: 'center', lineBreak: false });
+
+  // "CHECKS:" header label
+  doc.font('Courier').fontSize(7).fillColor(SL.bgLabelColor)
+     .text('CHECKS:', SL.cX * PT, bkRowY(BK.checksRow) * PT - 5, { lineBreak: false });
+
+  // ── Horizontal grid lines ─────────────────────────────────────────────────
+  for (let r = 0; r <= totalRows + 1; r++) {
+    const y = bkRowTopY(r) * PT;
+    const isOuter = r === 0 || r === totalRows + 1;
+    doc.moveTo(SL.stripX * PT, y).lineTo(SL.colCentsR * PT, y)
+       .lineWidth(isOuter ? 0.75 : 0.3).stroke(SL.bgLineColor);
+  }
+
+  // ── Row numbers (continuing from front: 31–60) ────────────────────────────
+  doc.font('Courier').fontSize(6).fillColor(SL.bgLabelColor);
+  for (let i = 0; i < BK.maxChecks; i++) {
+    const r = BK.firstRow + i;
+    doc.text(String(SL.maxChecks + i + 1), SL.cX * PT, bkRowY(r) * PT - 4,
+             { width: 14, align: 'right', lineBreak: false });
+  }
+
+  // ── "TOTAL $" footer label ────────────────────────────────────────────────
+  doc.font('Courier-Bold').fontSize(7).fillColor('#000000')
+     .text('T O T A L  $', SL.cX * PT, bkRowY(totalRows) * PT - 5, { lineBreak: false });
+
+  // ── "Forward to other side" in left strip (rotated) ───────────────────────
+  const fwdY = bkRowTopY(totalRows) + SL.rowH * 0.5;
+  doc.save();
+  doc.translate(SL.stripCenterX * PT, fwdY * PT);
+  doc.rotate(90);
+  doc.font('Helvetica').fontSize(6).fillColor(SL.bgLabelColor)
+     .text('Forward to other side', 0, 0, { lineBreak: false });
+  doc.restore();
+
+  // ── Amount data ───────────────────────────────────────────────────────────
+  backItems.forEach((item, i) => {
+    const r = BK.firstRow + i;
+    const y = (bkRowY(r) - 0.015) * PT;
+    if (item.check_no) {
+      doc.font('Courier').fontSize(7).fillColor('#000000')
+         .text(String(item.check_no).slice(0, 8),
+               (SL.cX + 0.16) * PT, y,
+               { width: SL.checkNoW * PT, lineBreak: false });
+    }
+    if ((item.amount || 0) > 0) {
+      doc.font('Courier').fontSize(8).fillColor('#000000');
+      drawDigitAmount(doc, item.amount, dollarsRightX, y);
+    }
+  });
+
+  // Back page total
+  doc.font('Courier').fontSize(8).fillColor('#000000');
+  drawDigitAmount(doc, backTotal, dollarsRightX, (bkRowY(totalRows) - 0.015) * PT);
+
+  doc.restore();
 }
 
 // ── Amount rendering helpers ──────────────────────────────────────────────────
