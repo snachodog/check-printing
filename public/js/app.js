@@ -2007,6 +2007,7 @@ async function init() {
   document.getElementById('nudge-left').addEventListener('click',  () => nudgeLayoutField(-1,  0));
   document.getElementById('nudge-right').addEventListener('click', () => nudgeLayoutField( 1,  0));
   document.getElementById('btn-layout-reset').addEventListener('click', resetLayoutToDefault);
+  document.getElementById('btn-layout-preview').addEventListener('click', previewLayoutPdf);
 
   // Initial auth check → loads app if already signed in
   const authed = await checkAuth();
@@ -2453,6 +2454,31 @@ async function saveLayoutField(f) {
   } catch (err) {
     const el = document.getElementById('layout-save-status');
     if (el) el.textContent = 'Save failed';
+  }
+}
+
+async function previewLayoutPdf() {
+  const btn = document.getElementById('btn-layout-preview');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    const res = await fetch('/api/pdf/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account_id: state.activeAccountId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || res.statusText);
+    }
+    const blob = await res.blob();
+    openPdfBlob(blob, 'layout-preview.pdf');
+  } catch (err) {
+    alert('Preview error: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
   }
 }
 
