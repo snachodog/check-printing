@@ -70,4 +70,55 @@ router.post('/', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/pdf/preview
+ * Body: { account_id: X }
+ *
+ * Generates a layout preview PDF using dummy check data — no real checks touched.
+ * Shows all three slots filled with sample data so every visible field is visible.
+ */
+router.post('/preview', async (req, res) => {
+  const resolvedAccountId = parseInt(req.body.account_id, 10);
+  if (!resolvedAccountId) return res.status(400).json({ error: 'account_id required' });
+
+  const account = db.prepare('SELECT * FROM account WHERE id = ?').get(resolvedAccountId);
+  if (!account) return res.status(404).json({ error: 'Account not found.' });
+
+  const fields = db.prepare('SELECT * FROM layout_fields WHERE account_id = ?').all(resolvedAccountId);
+
+  const DUMMY_CHECK = {
+    id: 0,
+    check_no: 1001,
+    payee: 'Sample Payee Name',
+    amount: 1234.56,
+    check_date: new Date().toISOString().slice(0, 10),
+    memo: 'Sample Memo',
+    payee_address1: '123 Sample Street',
+    payee_address2: 'City, ST 12345',
+    payee_address3: null,
+    payee_address4: null,
+    printed: 0,
+    account_id: resolvedAccountId,
+  };
+
+  const checks = [
+    { ...DUMMY_CHECK, check_no: 1001 },
+    { ...DUMMY_CHECK, check_no: 1002 },
+    { ...DUMMY_CHECK, check_no: 1003 },
+  ];
+
+  try {
+    const pdfBuffer = await generateCheckPdf(account, checks, fields);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': 'inline; filename="layout-preview.pdf"',
+      'Content-Length': pdfBuffer.length,
+    });
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error('Preview PDF error:', err);
+    res.status(500).json({ error: 'Preview generation failed.' });
+  }
+});
+
 module.exports = router;
