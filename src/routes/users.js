@@ -57,77 +57,86 @@ router.post('/', async (req, res) => {
 
 // PUT /api/users/:id
 router.put('/:id', async (req, res) => {
-  const user = db.prepare('SELECT id, role FROM users WHERE id = ?').get(req.params.id);
+  const userId = parseInt(req.params.id, 10);
+  const user = db.prepare('SELECT id, role FROM users WHERE id = ?').get(userId);
   if (!user) return res.status(404).json({ error: 'User not found.' });
 
   const { username, password, role, accounts, email, oidc_sub, oidc_issuer } = req.body;
 
+  // ── Validate everything before writing anything ──
   if (role && !['admin', 'editor', 'viewer'].includes(role)) {
     return res.status(400).json({ error: 'Invalid role.' });
   }
-
-  if (username && username.trim() !== '') {
-    try {
-      db.prepare("UPDATE users SET username = ?, updated_at = datetime('now') WHERE id = ?")
-        .run(username.trim(), req.params.id);
-    } catch (err) {
-      if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'Username already taken.' });
-      throw err;
-    }
+  if (role && role !== 'admin' && user.role === 'admin') {
+    const { n } = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND id != ?").get(userId);
+    if (n === 0) return res.status(400).json({ error: 'Cannot demote the last admin.' });
   }
-
-  if (role) {
-    db.prepare("UPDATE users SET role = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(role, req.params.id);
-  }
-
-  if (email !== undefined) {
-    db.prepare("UPDATE users SET email = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(email ? email.trim() : null, req.params.id);
-  }
-
   if (password) {
     const pwErr = validatePassword(password);
     if (pwErr) return res.status(400).json({ error: pwErr });
-    const hash = await bcrypt.hash(password, 12);
-    db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(hash, req.params.id);
   }
 
-  // OIDC linking — admin can set or clear oidc_sub/oidc_issuer
+  let newSub, newIssuer;
   if (oidc_sub !== undefined) {
-    const newSub    = oidc_sub    ? oidc_sub.trim()    : null;
-    const newIssuer = oidc_issuer ? oidc_issuer.trim() : null;
+    newSub    = oidc_sub    ? oidc_sub.trim()    : null;
+    newIssuer = oidc_issuer ? oidc_issuer.trim() : null;
     if (newSub && !newIssuer) {
       return res.status(400).json({ error: 'OIDC issuer is required when setting OIDC subject.' });
     }
     if (newSub) {
       const existing = db.prepare(
         'SELECT id FROM users WHERE oidc_issuer = ? AND oidc_sub = ? AND id != ?'
-      ).get(newIssuer, newSub, req.params.id);
+      ).get(newIssuer, newSub, userId);
       if (existing) return res.status(409).json({ error: 'This OIDC identity is already linked to another user.' });
     }
-    db.prepare("UPDATE users SET oidc_sub = ?, oidc_issuer = ?, updated_at = datetime('now') WHERE id = ?")
-      .run(newSub, newSub ? newIssuer : null, req.params.id);
   }
 
-  if (Array.isArray(accounts)) {
-    db.prepare('DELETE FROM user_accounts WHERE user_id = ?').run(req.params.id);
-    const effectiveRole = role || user.role;
-    if (effectiveRole !== 'admin' && accounts.length > 0) {
-      const stmt = db.prepare('INSERT OR IGNORE INTO user_accounts (user_id, account_id, role) VALUES (?, ?, ?)');
-      accounts.forEach(a => stmt.run(req.params.id, a.id, a.role === 'editor' ? 'editor' : 'viewer'));
-    }
+  const passwordHash = password ? await bcrypt.hash(password, 12) : null;
+
+  // ── Apply all changes atomically ──
+  try {
+    db.transaction(() => {
+      if (username && username.trim() !== '') {
+        db.prepare("UPDATE users SET username = ?, updated_at = datetime('now') WHERE id = ?")
+          .run(username.trim(), userId);
+      }
+      if (role) {
+        db.prepare("UPDATE users SET role = ?, updated_at = datetime('now') WHERE id = ?")
+          .run(role, userId);
+      }
+      if (email !== undefined) {
+        db.prepare("UPDATE users SET email = ?, updated_at = datetime('now') WHERE id = ?")
+          .run(email ? email.trim() : null, userId);
+      }
+      if (passwordHash) {
+        db.prepare("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?")
+          .run(passwordHash, userId);
+      }
+      if (oidc_sub !== undefined) {
+        db.prepare("UPDATE users SET oidc_sub = ?, oidc_issuer = ?, updated_at = datetime('now') WHERE id = ?")
+          .run(newSub, newSub ? newIssuer : null, userId);
+      }
+      if (Array.isArray(accounts)) {
+        db.prepare('DELETE FROM user_accounts WHERE user_id = ?').run(userId);
+        const effectiveRole = role || user.role;
+        if (effectiveRole !== 'admin' && accounts.length > 0) {
+          const stmt = db.prepare('INSERT OR IGNORE INTO user_accounts (user_id, account_id, role) VALUES (?, ?, ?)');
+          accounts.forEach(a => stmt.run(userId, a.id, a.role === 'editor' ? 'editor' : 'viewer'));
+        }
+      }
+      // If role or account assignments changed, invalidate all active sessions for
+      // this user so the new permissions take effect immediately.
+      if (role || Array.isArray(accounts)) {
+        db.prepare("DELETE FROM sessions WHERE CAST(json_extract(sess, '$.userId') AS INTEGER) = ?")
+          .run(userId);
+      }
+    })();
+  } catch (err) {
+    if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'Username already taken.' });
+    throw err;
   }
 
-  // If role or account assignments changed, invalidate all active sessions for this user
-  // so the new permissions take effect immediately rather than at session expiry.
-  if (role || Array.isArray(accounts)) {
-    db.prepare("DELETE FROM sessions WHERE CAST(json_extract(sess, '$.userId') AS INTEGER) = ?")
-      .run(parseInt(req.params.id, 10));
-  }
-
-  res.json(userWithAccounts(req.params.id));
+  res.json(userWithAccounts(userId));
 });
 
 // DELETE /api/users/:id

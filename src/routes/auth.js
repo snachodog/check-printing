@@ -15,44 +15,56 @@ function validatePassword(password) {
   return null;
 }
 
-// ── Login rate limiter ────────────────────────────────────────────────────────
-// Tracks failed login attempts per IP. After 10 failures within 15 minutes,
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+// Sliding-window counter per key (IP). After `max` hits within `windowMs`,
 // further attempts are blocked until the window resets.
-const loginAttempts = new Map(); // ip -> { count, resetAt }
-const RATE_WINDOW_MS  = 15 * 60 * 1000; // 15 minutes
-const RATE_MAX_FAILS  = 10;
+function makeRateLimiter(max, windowMs) {
+  const attempts = new Map(); // key -> { count, resetAt }
 
-function checkLoginRate(ip) {
-  const now  = Date.now();
-  const entry = loginAttempts.get(ip);
-  if (!entry || now > entry.resetAt) {
-    loginAttempts.set(ip, { count: 0, resetAt: now + RATE_WINDOW_MS });
-    return true; // allow
-  }
-  return entry.count < RATE_MAX_FAILS;
+  // Purge stale entries every 30 minutes to prevent unbounded memory growth
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of attempts) {
+      if (now > entry.resetAt) attempts.delete(key);
+    }
+  }, 30 * 60 * 1000).unref();
+
+  return {
+    allowed(key) {
+      const entry = attempts.get(key);
+      if (!entry || Date.now() > entry.resetAt) return true;
+      return entry.count < max;
+    },
+    record(key) {
+      const now   = Date.now();
+      const entry = attempts.get(key);
+      if (!entry || now > entry.resetAt) {
+        attempts.set(key, { count: 1, resetAt: now + windowMs });
+      } else {
+        entry.count++;
+      }
+    },
+    clear(key) {
+      attempts.delete(key);
+    },
+  };
 }
 
-function recordLoginFailure(ip) {
-  const now   = Date.now();
-  const entry = loginAttempts.get(ip);
-  if (!entry || now > entry.resetAt) {
-    loginAttempts.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
-  } else {
-    entry.count++;
-  }
-}
+// 10 failed logins per IP per 15 minutes
+const loginLimiter = makeRateLimiter(10, 15 * 60 * 1000);
+// 5 reset emails per IP per 15 minutes (counts every request, success or not)
+const resetLimiter = makeRateLimiter(5, 15 * 60 * 1000);
 
-function clearLoginFailures(ip) {
-  loginAttempts.delete(ip);
+// Regenerates the session ID before establishing a login (prevents session fixation)
+function establishSession(req, user, cb) {
+  req.session.regenerate(err => {
+    if (err) return cb(err);
+    req.session.userId   = user.id;
+    req.session.username = user.username;
+    req.session.role     = user.role;
+    cb(null);
+  });
 }
-
-// Purge stale entries every 30 minutes to prevent unbounded memory growth
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, entry] of loginAttempts) {
-    if (now > entry.resetAt) loginAttempts.delete(ip);
-  }
-}, 30 * 60 * 1000).unref();
 
 // GET /api/auth/setup-needed — true when no users exist (first-run)
 router.get('/setup-needed', (req, res) => {
@@ -75,18 +87,18 @@ router.post('/setup', async (req, res) => {
     "INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'admin')"
   ).run(username.trim(), hash);
 
-  req.session.userId   = result.lastInsertRowid;
-  req.session.username = username.trim();
-  req.session.role     = 'admin';
-
-  res.status(201).json({ id: result.lastInsertRowid, username: username.trim(), role: 'admin' });
+  const user = { id: result.lastInsertRowid, username: username.trim(), role: 'admin' };
+  establishSession(req, user, err => {
+    if (err) return res.status(500).json({ error: 'Failed to create session.' });
+    res.status(201).json(user);
+  });
 });
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
 
-  if (!checkLoginRate(ip)) {
+  if (!loginLimiter.allowed(ip)) {
     return res.status(429).json({ error: 'Too many failed login attempts. Please try again later.' });
   }
 
@@ -95,22 +107,21 @@ router.post('/login', async (req, res) => {
 
   const user = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(username.trim());
   if (!user) {
-    recordLoginFailure(ip);
+    loginLimiter.record(ip);
     return res.status(401).json({ error: 'Invalid username or password.' });
   }
 
   const match = await bcrypt.compare(password, user.password_hash);
   if (!match) {
-    recordLoginFailure(ip);
+    loginLimiter.record(ip);
     return res.status(401).json({ error: 'Invalid username or password.' });
   }
 
-  clearLoginFailures(ip);
-  req.session.userId   = user.id;
-  req.session.username = user.username;
-  req.session.role     = user.role;
-
-  res.json({ id: user.id, username: user.username, role: user.role });
+  loginLimiter.clear(ip);
+  establishSession(req, user, err => {
+    if (err) return res.status(500).json({ error: 'Failed to create session.' });
+    res.json({ id: user.id, username: user.username, role: user.role });
+  });
 });
 
 // POST /api/auth/logout
@@ -154,6 +165,12 @@ router.post('/change-password', async (req, res) => {
 
 // POST /api/auth/forgot-password — always 200 to avoid user enumeration
 router.post('/forgot-password', async (req, res) => {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  if (!resetLimiter.allowed(ip)) {
+    return res.status(429).json({ error: 'Too many reset requests. Please try again later.' });
+  }
+  resetLimiter.record(ip);
+
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required.' });
 
@@ -168,7 +185,9 @@ router.post('/forgot-password', async (req, res) => {
       db.prepare('INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)').run(user.id, tokenHash, expiresAt);
     })();
 
-    const baseUrl   = `${req.protocol}://${req.get('host')}`;
+    // Prefer the configured base URL; deriving it from the Host header lets an
+    // attacker poison reset links (host header injection)
+    const baseUrl   = (process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
     const resetLink = `${baseUrl}/#reset?token=${token}`;
 
     try {
@@ -221,17 +240,13 @@ function getOidcSettings() {
 
 async function getOidcClient(settings) {
   const { Issuer } = require('openid-client');
-  console.log('[oidc] discovering issuer from:', settings.discovery_url);
   const issuer = await Issuer.discover(settings.discovery_url);
-  console.log('[oidc] discovered issuer:', issuer.issuer);
-  const client = new issuer.Client({
+  return new issuer.Client({
     client_id:     settings.client_id,
     client_secret: settings.client_secret,
     redirect_uris: [settings.redirect_uri],
     response_types: ['code'],
   });
-  console.log('[oidc] client created, redirect_uri:', settings.redirect_uri);
-  return client;
 }
 
 // GET /api/auth/oidc/config — public, returns whether OIDC is enabled + button label
@@ -244,8 +259,6 @@ router.get('/oidc/config', (req, res) => {
 router.get('/oidc/authorize', async (req, res) => {
   try {
     const settings = getOidcSettings();
-    console.log('[oidc] authorize: enabled=%s, discovery_url=%s, client_id=%s, redirect_uri=%s',
-      settings.enabled, settings.discovery_url, settings.client_id, settings.redirect_uri);
     if (!settings.enabled) return res.status(400).json({ error: 'OIDC is not enabled.' });
 
     const { generators } = require('openid-client');
@@ -266,11 +279,10 @@ router.get('/oidc/authorize', async (req, res) => {
       code_challenge_method: 'S256',
     });
 
-    console.log('[oidc] authorize: redirecting to:', authUrl.substring(0, 200) + '...');
     // Ensure session is persisted before redirecting (saveUninitialized is false)
     req.session.save(() => res.redirect(authUrl));
   } catch (err) {
-    console.error('[oidc] authorize error:', err.message, err.stack);
+    console.error('[oidc] authorize error:', err.message);
     res.redirect('/#oidc-error=' + encodeURIComponent('Failed to initiate SSO login.'));
   }
 });
@@ -278,7 +290,6 @@ router.get('/oidc/authorize', async (req, res) => {
 // GET /api/auth/oidc/callback — handles the provider redirect
 router.get('/oidc/callback', async (req, res) => {
   try {
-    console.log('[oidc] callback: query params:', JSON.stringify(req.query));
     const settings = getOidcSettings();
     if (!settings.enabled) return res.redirect('/#oidc-error=' + encodeURIComponent('OIDC is not enabled.'));
 
@@ -287,12 +298,9 @@ router.get('/oidc/callback', async (req, res) => {
       console.error('[oidc] callback: no oidc session data found — session may have expired or cookie lost');
       return res.redirect('/#oidc-error=' + encodeURIComponent('Session expired. Please try again.'));
     }
-    console.log('[oidc] callback: session has oidc data, linking=%s, linkUserId=%s',
-      !!oidcSession.linking, oidcSession.linkUserId || 'n/a');
 
     const client = await getOidcClient(settings);
     const params = client.callbackParams(req);
-    console.log('[oidc] callback: exchanging code for tokens...');
 
     const tokenSet = await client.callback(settings.redirect_uri, params, {
       code_verifier: oidcSession.code_verifier,
@@ -303,25 +311,21 @@ router.get('/oidc/callback', async (req, res) => {
     const claims = tokenSet.claims();
     const sub    = claims.sub;
     const issuer = claims.iss;
-    console.log('[oidc] callback: token exchange OK, sub=%s, iss=%s, email=%s, name=%s',
-      sub, issuer, claims.email || 'n/a', claims.name || 'n/a');
 
     delete req.session.oidc;
 
     // Self-service linking flow
     if (oidcSession.linking && oidcSession.linkUserId) {
-      console.log('[oidc] callback: linking flow for userId=%s', oidcSession.linkUserId);
       const existing = db.prepare(
         'SELECT id FROM users WHERE oidc_issuer = ? AND oidc_sub = ? AND id != ?'
       ).get(issuer, sub, oidcSession.linkUserId);
       if (existing) {
-        console.warn('[oidc] callback: identity already linked to userId=%s', existing.id);
         return res.redirect('/#oidc-error=' + encodeURIComponent('This identity is already linked to another account.'));
       }
 
       db.prepare("UPDATE users SET oidc_sub = ?, oidc_issuer = ?, updated_at = datetime('now') WHERE id = ?")
         .run(sub, issuer, oidcSession.linkUserId);
-      console.log('[oidc] callback: linked sub=%s to userId=%s', sub, oidcSession.linkUserId);
+      console.log('[oidc] linked identity to userId=%s', oidcSession.linkUserId);
       return res.redirect('/#oidc-linked');
     }
 
@@ -331,26 +335,23 @@ router.get('/oidc/callback', async (req, res) => {
     ).get(issuer, sub);
 
     if (!user) {
-      console.warn('[oidc] callback: no user found for iss=%s sub=%s — not linked', issuer, sub);
+      console.warn('[oidc] callback: identity not linked to any user');
       return res.redirect('/#oidc-error=' + encodeURIComponent(
         'No account is linked to this identity. Ask an admin to link your account, or sign in with your password and link it yourself.'
       ));
     }
 
-    console.log('[oidc] callback: login success, userId=%s, username=%s, role=%s', user.id, user.username, user.role);
-    req.session.userId   = user.id;
-    req.session.username = user.username;
-    req.session.role     = user.role;
-
-    // Load account access into session (mirrors login behavior)
-    if (user.role !== 'admin') {
-      const accts = db.prepare('SELECT account_id, role FROM user_accounts WHERE user_id = ?').all(user.id);
-      req.session.accounts = accts;
-    }
-
-    res.redirect('/');
+    console.log('[oidc] login success for userId=%s', user.id);
+    establishSession(req, user, err => {
+      if (err) return res.redirect('/#oidc-error=' + encodeURIComponent('SSO login failed. Please try again.'));
+      // Load account access into session (mirrors login behavior)
+      if (user.role !== 'admin') {
+        req.session.accounts = db.prepare('SELECT account_id, role FROM user_accounts WHERE user_id = ?').all(user.id);
+      }
+      res.redirect('/');
+    });
   } catch (err) {
-    console.error('[oidc] callback error:', err.message, err.stack);
+    console.error('[oidc] callback error:', err.message);
     res.redirect('/#oidc-error=' + encodeURIComponent('SSO login failed. Please try again.'));
   }
 });
@@ -362,7 +363,6 @@ router.get('/oidc/link', async (req, res) => {
   }
 
   try {
-    console.log('[oidc] link: userId=%s initiating linking flow', req.session.userId);
     const settings = getOidcSettings();
     if (!settings.enabled) return res.redirect('/#oidc-error=' + encodeURIComponent('OIDC is not enabled.'));
 
@@ -384,10 +384,9 @@ router.get('/oidc/link', async (req, res) => {
       code_challenge_method: 'S256',
     });
 
-    console.log('[oidc] link: redirecting to provider');
     req.session.save(() => res.redirect(authUrl));
   } catch (err) {
-    console.error('[oidc] link error:', err.message, err.stack);
+    console.error('[oidc] link error:', err.message);
     res.redirect('/#oidc-error=' + encodeURIComponent('Failed to initiate SSO linking.'));
   }
 });

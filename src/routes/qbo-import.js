@@ -6,7 +6,7 @@ const multer  = require('multer');
 const os      = require('os');
 const fs      = require('fs');
 
-const upload = multer({ dest: os.tmpdir() });
+const upload = multer({ dest: os.tmpdir(), limits: { fileSize: 10 * 1024 * 1024 } });
 const { isEditorForAccount } = require('../middleware/auth');
 
 // ── CSV helpers ───────────────────────────────────────────────────────────────
@@ -165,6 +165,29 @@ function extractRows(text, type) {
 
 // ── Confirm helpers ───────────────────────────────────────────────────────────
 
+// Records come back from the client as JSON, not from the parsed file —
+// re-validate them server-side. Normalizes amount/check_no in place.
+// Returns an error string, or null if all records are valid.
+function validateRecords(records, type) {
+  for (const rec of records) {
+    if (!rec || typeof rec !== 'object') return 'Invalid record.';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(rec.date || '')) {
+      return 'Each record must have a date in YYYY-MM-DD format.';
+    }
+    const amount = Number(rec.amount);
+    if (!isFinite(amount) || amount <= 0) {
+      return 'Each record amount must be a positive number.';
+    }
+    rec.amount = Math.round(amount * 100) / 100;
+    if (type === 'checks' && rec.check_no !== null && rec.check_no !== undefined) {
+      const n = parseInt(rec.check_no, 10);
+      if (!Number.isInteger(n) || n < 1) return 'Check numbers must be positive integers.';
+      rec.check_no = n;
+    }
+  }
+  return null;
+}
+
 function confirmChecks(db, records, account_id) {
   const existing = new Set(
     db.prepare('SELECT check_no FROM checks WHERE account_id = ?').all(account_id).map(r => r.check_no)
@@ -312,6 +335,8 @@ router.post('/confirm', express.json(), (req, res) => {
   if (records.length > 1000) {
     return res.status(400).json({ error: 'Cannot import more than 1000 records at a time.' });
   }
+  const validationError = validateRecords(records, type);
+  if (validationError) return res.status(400).json({ error: validationError });
 
   const db = require('../db/database');
   try {
