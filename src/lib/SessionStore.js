@@ -28,8 +28,9 @@ class SessionStore extends Store {
 
   set(sid, sess, cb) {
     try {
+      // cookie.maxAge is already in milliseconds
       const maxAge = (sess.cookie && sess.cookie.maxAge)
-        ? sess.cookie.maxAge * 1000
+        ? sess.cookie.maxAge
         : 7 * 24 * 60 * 60 * 1000;
       const expired = Date.now() + maxAge;
       this.db.prepare(
