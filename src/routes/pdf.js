@@ -30,10 +30,11 @@ router.post('/', async (req, res) => {
   }
 
   // Fetch checks in the order provided; verify each belongs to the declared account
+  const checkStmt = db.prepare('SELECT * FROM checks WHERE id = ?');
   let checks;
   try {
     checks = checkIds.map(id => {
-      const check = db.prepare('SELECT * FROM checks WHERE id = ?').get(id);
+      const check = checkStmt.get(id);
       if (!check) throw new Error(`Check ID ${id} not found`);
       if (check.account_id !== resolvedAccountId) throw new Error(`Check ID ${id} does not belong to this account`);
       return check;
