@@ -27,12 +27,20 @@ const SESSION_SECRET = process.env.SESSION_SECRET;
 
 const SESSION_MAX_AGE_MS = (parseInt(process.env.SESSION_MAX_AGE_HOURS, 10) || 168) * 60 * 60 * 1000;
 
+// Behind a reverse proxy (TLS termination), set TRUST_PROXY=1 so req.ip and
+// req.protocol reflect the original client instead of the proxy.
+if (process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true') {
+  app.set('trust proxy', 1);
+}
+
 app.use(session({
   store: new SessionStore(db),
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, sameSite: 'strict', maxAge: SESSION_MAX_AGE_MS },
+  // secure: 'auto' marks the cookie Secure only on TLS connections, so plain-HTTP
+  // LAN deployments keep working while proxied HTTPS deployments get Secure cookies
+  cookie: { httpOnly: true, sameSite: 'strict', secure: 'auto', maxAge: SESSION_MAX_AGE_MS },
 }));
 
 // Security headers

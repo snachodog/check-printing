@@ -162,6 +162,8 @@ docker exec -it check-printing node migrations/import-mdb.js \
 | `SESSION_MAX_AGE_HOURS` | `168` | Session lifetime in hours (default 7 days) |
 | `PORT` | `3000` | HTTP listen port |
 | `DB_PATH` | `/app/data/check-printing.db` | SQLite database file path |
+| `APP_BASE_URL` | *(empty)* | Public base URL used in password reset links, e.g. `https://checks.example.com`. Recommended in production |
+| `TRUST_PROXY` | *(empty)* | Set to `1` when running behind a reverse proxy so client IPs and HTTPS detection work correctly |
 | `OIDC_ENABLED` | *(empty)* | Set to `true` or `1` to enable OIDC login |
 | `OIDC_DISCOVERY_URL` | *(empty)* | Provider's `.well-known/openid-configuration` URL |
 | `OIDC_CLIENT_ID` | *(empty)* | OIDC client ID |
@@ -185,6 +187,9 @@ services:
       - check-printing-data:/app/data
     environment:
       - SESSION_SECRET=${SESSION_SECRET}
+      # Optional: public base URL for reset links, reverse-proxy support
+      - APP_BASE_URL=${APP_BASE_URL:-}
+      - TRUST_PROXY=${TRUST_PROXY:-}
       # Optional: OIDC / SSO
       - OIDC_ENABLED=${OIDC_ENABLED:-}
       - OIDC_DISCOVERY_URL=${OIDC_DISCOVERY_URL:-}
