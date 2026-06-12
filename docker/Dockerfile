@@ -1,5 +1,7 @@
 FROM node:20-slim
 
+ENV NODE_ENV=production
+
 # mdbtools for migration script (only needed on first run, stays in image for convenience)
 RUN apt-get update && apt-get install -y --no-install-recommends mdbtools && rm -rf /var/lib/apt/lists/*
 
@@ -10,8 +12,12 @@ RUN npm ci --omit=dev
 
 COPY . .
 
-# Data volume: SQLite database and any runtime uploads
+# Data volume: SQLite database and any runtime uploads.
+# Pre-create it owned by the unprivileged user so named volumes inherit ownership.
+RUN mkdir -p /app/data && chown -R node:node /app
 VOLUME ["/app/data"]
+
+USER node
 
 EXPOSE 3000
 

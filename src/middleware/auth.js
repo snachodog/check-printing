@@ -2,6 +2,11 @@
 
 const db = require('../db/database');
 
+// Prepared once — this lookup runs on nearly every authenticated request
+const accountRoleStmt = db.prepare(
+  'SELECT role FROM user_accounts WHERE user_id = ? AND account_id = ?'
+);
+
 function requireAuth(req, res, next) {
   if (!req.session || !req.session.userId) {
     return res.status(401).json({ error: 'Not authenticated.' });
@@ -28,10 +33,7 @@ function requireEditor(req, res, next) {
 function canAccessAccount(session, accountId) {
   if (!session || !session.userId) return false;
   if (session.role === 'admin') return true;
-  const row = db.prepare(
-    'SELECT 1 FROM user_accounts WHERE user_id = ? AND account_id = ?'
-  ).get(session.userId, accountId);
-  return !!row;
+  return !!accountRoleStmt.get(session.userId, accountId);
 }
 
 // Returns true if the user has editor (write) access to the given account.
@@ -39,9 +41,7 @@ function canAccessAccount(session, accountId) {
 function isEditorForAccount(session, accountId) {
   if (!session || !session.userId) return false;
   if (session.role === 'admin') return true;
-  const row = db.prepare(
-    "SELECT role FROM user_accounts WHERE user_id = ? AND account_id = ?"
-  ).get(session.userId, accountId);
+  const row = accountRoleStmt.get(session.userId, accountId);
   return !!(row && row.role === 'editor');
 }
 

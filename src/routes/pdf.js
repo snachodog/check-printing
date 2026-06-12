@@ -4,7 +4,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/database');
 const { generateCheckPdf } = require('../services/pdfService');
-const { isEditorForAccount } = require('../middleware/auth');
+const { canAccessAccount, isEditorForAccount } = require('../middleware/auth');
 
 /**
  * POST /api/pdf
@@ -30,10 +30,11 @@ router.post('/', async (req, res) => {
   }
 
   // Fetch checks in the order provided; verify each belongs to the declared account
+  const checkStmt = db.prepare('SELECT * FROM checks WHERE id = ?');
   let checks;
   try {
     checks = checkIds.map(id => {
-      const check = db.prepare('SELECT * FROM checks WHERE id = ?').get(id);
+      const check = checkStmt.get(id);
       if (!check) throw new Error(`Check ID ${id} not found`);
       if (check.account_id !== resolvedAccountId) throw new Error(`Check ID ${id} does not belong to this account`);
       return check;
@@ -80,6 +81,11 @@ router.post('/', async (req, res) => {
 router.post('/preview', async (req, res) => {
   const resolvedAccountId = parseInt(req.body.account_id, 10);
   if (!resolvedAccountId) return res.status(400).json({ error: 'account_id required' });
+  // The preview renders the MICR line (routing + account number) — same access
+  // rules as reading the account itself
+  if (!canAccessAccount(req.session, resolvedAccountId)) {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
 
   const account = db.prepare('SELECT * FROM account WHERE id = ?').get(resolvedAccountId);
   if (!account) return res.status(404).json({ error: 'Account not found.' });

@@ -4,7 +4,6 @@ const express   = require('express');
 const path      = require('path');
 const fs        = require('fs');
 const os        = require('os');
-const crypto    = require('crypto');
 const { execFileSync } = require('child_process');
 const multer    = require('multer');
 const session   = require('express-session');
@@ -14,7 +13,14 @@ const { seedLayoutFields } = require('./db/database');
 const { requireAuth, requireAdmin, canAccessAccount, isEditorForAccount } = require('./middleware/auth');
 
 const app    = express();
-const upload = multer({ dest: os.tmpdir() });
+app.disable('x-powered-by');
+const upload = multer({ dest: os.tmpdir(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+// US ABA routing numbers are exactly 9 digits (spaces/dashes tolerated on input)
+function normalizeRoutingNumber(value) {
+  const digits = String(value || '').replace(/[\s-]/g, '');
+  return /^\d{9}$/.test(digits) ? digits : null;
+}
 
 // ── Session store (SQLite-backed, no extra packages) ──────────────────────────
 const SessionStore = require('./lib/SessionStore');
@@ -27,12 +33,20 @@ const SESSION_SECRET = process.env.SESSION_SECRET;
 
 const SESSION_MAX_AGE_MS = (parseInt(process.env.SESSION_MAX_AGE_HOURS, 10) || 168) * 60 * 60 * 1000;
 
+// Behind a reverse proxy (TLS termination), set TRUST_PROXY=1 so req.ip and
+// req.protocol reflect the original client instead of the proxy.
+if (process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true') {
+  app.set('trust proxy', 1);
+}
+
 app.use(session({
   store: new SessionStore(db),
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, sameSite: 'strict', maxAge: SESSION_MAX_AGE_MS },
+  // secure: 'auto' marks the cookie Secure only on TLS connections, so plain-HTTP
+  // LAN deployments keep working while proxied HTTPS deployments get Secure cookies
+  cookie: { httpOnly: true, sameSite: 'strict', secure: 'auto', maxAge: SESSION_MAX_AGE_MS },
 }));
 
 // Security headers
@@ -112,6 +126,10 @@ app.put('/api/account/:id', requireAdmin, (req, res) => {
   if (!company1 || !routing_number || !account_number) {
     return res.status(400).json({ error: 'Organization name, routing number, and account number are required.' });
   }
+  const normalizedRouting = normalizeRoutingNumber(routing_number);
+  if (!normalizedRouting) {
+    return res.status(400).json({ error: 'Routing number must be exactly 9 digits.' });
+  }
   const MAX_IMAGE_BYTES = 512 * 1024; // 512 KB base64 limit
   if (logo_data && Buffer.byteLength(logo_data, 'utf8') > MAX_IMAGE_BYTES) {
     return res.status(400).json({ error: 'Logo image must be smaller than 512 KB.' });
@@ -133,7 +151,7 @@ app.put('/api/account/:id', requireAdmin, (req, res) => {
   `).run(
     company1 || null, company2 || null, company3 || null, company4 || null,
     bank_name || '', bank_info1 || null, bank_info2 || null, bank_info3 || null, transit_code || null,
-    routing_number, account_number,
+    normalizedRouting, account_number,
     parseFloat(offset_left) || 0, parseFloat(offset_right) || 0,
     parseFloat(offset_up) || 0, parseFloat(offset_down) || 0,
     second_signature ? 1 : 0, resolvedPosition,
@@ -206,6 +224,10 @@ app.post('/api/account/setup', requireAdmin, (req, res) => {
   if (!company1 || !routing_number || !account_number || !start_check_no) {
     return res.status(400).json({ error: 'Organization name, routing number, account number, and starting check number are required.' });
   }
+  const normalizedRouting = normalizeRoutingNumber(routing_number);
+  if (!normalizedRouting) {
+    return res.status(400).json({ error: 'Routing number must be exactly 9 digits.' });
+  }
   const checkNo = parseInt(start_check_no, 10);
   if (isNaN(checkNo) || checkNo < 1) {
     return res.status(400).json({ error: 'Starting check number must be a positive integer.' });
@@ -226,7 +248,7 @@ app.post('/api/account/setup', requireAdmin, (req, res) => {
     bank_info1:       bank_info1 || null,
     bank_info2:       bank_info2 || null,
     transit_code:     transit_code || null,
-    routing_number,
+    routing_number:   normalizedRouting,
     account_number,
     start_check_no:   checkNo,
     current_check_no: checkNo,
@@ -302,6 +324,22 @@ app.post('/api/layout/:accountId/reset', requireAdmin, (req, res) => {
 // Catch-all: serve index.html
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
+// JSON error handler — keeps stack traces out of responses
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ error: 'Uploaded file is too large.' });
+  }
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Request body is too large.' });
+  }
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Invalid JSON in request body.' });
+  }
+  console.error('[error]', err);
+  res.status(500).json({ error: 'Internal server error.' });
 });
 
 const PORT = process.env.PORT || 3000;
