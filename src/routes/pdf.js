@@ -4,7 +4,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/database');
 const { generateCheckPdf } = require('../services/pdfService');
-const { isEditorForAccount } = require('../middleware/auth');
+const { canAccessAccount, isEditorForAccount } = require('../middleware/auth');
 
 /**
  * POST /api/pdf
@@ -80,6 +80,11 @@ router.post('/', async (req, res) => {
 router.post('/preview', async (req, res) => {
   const resolvedAccountId = parseInt(req.body.account_id, 10);
   if (!resolvedAccountId) return res.status(400).json({ error: 'account_id required' });
+  // The preview renders the MICR line (routing + account number) — same access
+  // rules as reading the account itself
+  if (!canAccessAccount(req.session, resolvedAccountId)) {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
 
   const account = db.prepare('SELECT * FROM account WHERE id = ?').get(resolvedAccountId);
   if (!account) return res.status(404).json({ error: 'Account not found.' });
