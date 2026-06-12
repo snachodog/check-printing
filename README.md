@@ -46,6 +46,17 @@ docker compose up -d
 
 4. Use the setup wizard to configure your first checking account (organization info, bank info, routing/account numbers), or import an existing ezCheckPrinting `.mdb` file.
 
+#### Upgrading from images before v0.5
+
+The container now runs as the unprivileged `node` user (UID 1000). Existing data
+volumes were written as root, so fix ownership once before upgrading:
+
+```bash
+docker compose down
+docker run --rm -v check-printing-data:/data alpine chown -R 1000:1000 /data
+docker compose up -d
+```
+
 ### Development (local)
 
 ```bash
