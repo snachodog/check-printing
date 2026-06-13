@@ -246,9 +246,15 @@ function generateDepositSlip(account, deposit, items) {
 
     // When back page exists, add one extra row on front for "FROM REVERSE"
     const fromReverseRow = hasBackPage ? SL.firstCheckRow + SL.maxChecks : null;
-    const totalRows  = fromReverseRow != null
+    const hasCashBack = (deposit.cash_back || 0) > 0;
+    const lastDataRow = fromReverseRow != null
+      ? fromReverseRow
+      : SL.firstCheckRow + SL.maxChecks - 1;
+    const lessCashRow = hasCashBack ? lastDataRow + 1 : null;
+    let totalRows = fromReverseRow != null
       ? SL.firstCheckRow + SL.maxChecks + 1
       : SL.firstCheckRow + SL.maxChecks;
+    if (hasCashBack) totalRows += 1;
     const totalRowY_ = rowTopY(totalRows);
     const gridBottom = totalRowY_ + SL.rowH;
 
@@ -300,6 +306,9 @@ function generateDepositSlip(account, deposit, items) {
     rowLabel('CURRENCY', SL.currencyRow);
     rowLabel('COIN',     SL.coinRow);
     rowLabel('CHECKS:',  SL.checksRow);
+    if (lessCashRow != null) {
+      rowLabel('LESS CASH', lessCashRow);
+    }
 
     // Numbered check rows
     doc.font('Courier').fontSize(6).fillColor(SL.bgLabelColor);
@@ -402,6 +411,10 @@ function generateDepositSlip(account, deposit, items) {
       doc.font('Courier').fontSize(6).fillColor(SL.bgLabelColor)
          .text('FROM REVERSE', SL.cX * PT, rowY(fromReverseRow) * PT - 4, { lineBreak: false });
       drawAmountRow(backTotal, fromReverseRow);
+    }
+
+    if (lessCashRow != null) {
+      drawAmountRow(deposit.cash_back, lessCashRow);
     }
 
     drawAmountRow(depositTotal, totalRows);
