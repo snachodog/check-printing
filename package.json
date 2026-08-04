@@ -19,7 +19,10 @@
     "pdfkit": "^0.15.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0"
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "nodemon": "^3.1.0",
+    "semantic-release": "^25.0.8"
   },
   "overrides": {
     "qs": "^6.15.2"
